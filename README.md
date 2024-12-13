@@ -39,4 +39,4 @@ This script enhances the functionality of Lestrade's by integrating price data f
     Additional button to clear the cache, with a confirmation prompt to prevent accidental deletion.
 
 ## Installation
-Click [here](https://raw.githubusercontent.com/YourUsername/YourRepo/main/lestrades-enhancer.user.js) to install the userscript.
+Click [here](https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/raw/refs/heads/main/Lestrades-Enhancer.user.js) to install the userscript.
