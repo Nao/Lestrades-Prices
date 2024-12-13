@@ -12,6 +12,10 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @run-at       document-end
+// @homepageURL  https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/
+// @supportURL   https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/issues
+// @downloadURL  https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/raw/master/Lestrades-Enhancer.user.js
+// @updateURL    https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/raw/master/Lestrades-Enhancer.user.js
 // ==/UserScript==
 
 (function() {
