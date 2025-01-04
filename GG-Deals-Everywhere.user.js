@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Lestrades + GG.Deals Price Integration (Game + SWI, Custom Icon, Multiple Prices, Alphabetical, data-appid)
+// @name         GG.Deals Everywhere
 // @namespace    MrAwesomeFalcon
 // @version      0.3
 // @description  Integrates GG.Deals prices for both /game/ links and SWI-added items. Uses data-appid if present on game links, multiple prices, alphabetical sorting, merges by appid, no steamdb link, custom icon, inline styling. Always refetch on manual click, with global limit of 10 requests/minute.
@@ -31,13 +31,13 @@
 
     // CONFIG
     const INSERT_GG_BEFORE_SWI = false;
-    const AUTO_CHECK_COUNT = 5;
+    const AUTO_CHECK_COUNT = 0; // number of prices to automatically check every page load. CAREFUL this will almost certainly rate limit you immediately.
     const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // one week
-    const SHOW_CACHED_IMMEDIATELY = true;
-    const ITEMS_PER_PAGE = 50;
+    const SHOW_CACHED_IMMEDIATELY = true; // load items from the cache
+    const ITEMS_PER_PAGE = 50; // items per page in the cache view
     const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
-    const GAME_NAME_WIDTH = 70;
-    const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png';
+    const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
+    const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon
     // https://imgur.com/a/dTvpB2K Album of custom icons I made
 
     // Special items settings
@@ -45,7 +45,7 @@
     const SPECIAL_ITEMS = ["Gems", "Sack of Gems", "Mann Co. Supply Crate Key"];
 
     // REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/6 seconds)
-    const REQUEST_INTERVAL_MS = 6000; // 6 seconds between each request
+    const REQUEST_INTERVAL_MS = 6000; // 6 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
     let requestQueue = [];
     setInterval(() => {
         if (requestQueue.length > 0) {
