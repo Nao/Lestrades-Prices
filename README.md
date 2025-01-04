@@ -1,6 +1,11 @@
 # GG.Deals Everywhere
 Enhances various Steam trading and gifting sites by integrating price data from GG.Deals and other sources.
 
+## Requirements:
+You need to have SteamWebIntegration installed and running on pages where you want this script to work. It currently only works somewhat on Lestrades if you do not have SWI installed.
+
+**https://github.com/Revadike/SteamWebIntegration**
+
 ## Key Features
 
 1. **Price Fetching**  
