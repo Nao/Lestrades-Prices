@@ -46,6 +46,12 @@ Click [here](https://github.com/MrAwesomeFalcon/GG-Deals-Everywhere/raw/refs/hea
 Lestrades offer page:
 ![Lestrades offer page](https://i.imgur.com/DrKcJ03.png)
 
+Lestrades offer creation page:
+![Lestrades offer creation page](https://i.imgur.com/iCB27Ev.png)
+
+Lestrades matches page:
+
+![Lestrades matches page](https://i.imgur.com/C6NBAR8.png)
 
 Lestrades bundle page:
 ![Lestrades bundle page](https://i.imgur.com/9c6fneo.png)
