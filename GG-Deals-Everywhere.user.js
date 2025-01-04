@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         GG.Deals Everywhere
 // @namespace    MrAwesomeFalcon
-// @version      0.3
-// @description  Integrates GG.Deals prices for both /game/ links and SWI-added items. Uses data-appid if present on game links, multiple prices, alphabetical sorting, merges by appid, no steamdb link, custom icon, inline styling. Always refetch on manual click, with global limit of 10 requests/minute.
+// @version      0.4
+// @description  Integrates GG.Deals prices across multiple Steam trading and gifting sites with caching, rate limiting, special-item handling, and one-click price lookups.
 // @match        https://lestrades.com/*
 // @match        https://www.lestrades.com/*
 // @match        https://steamtrades.com/*
@@ -54,7 +54,6 @@
         }
     }, REQUEST_INTERVAL_MS);
 
-    // Helper function to queue requests
     function queueGMRequest(options) {
         requestQueue.push(options);
     }
@@ -80,15 +79,32 @@
     GM_registerMenuCommand("Soft load (only missing)", softLoad);
     GM_registerMenuCommand("Hard load (refresh all)", hardLoad);
 
-    let allItems = []; // for name-based /game/ links
+    // We'll keep arrays to track name-based items vs. appid-based items
+    let allItems = []; // name-based
     let freshGames = [];
-    let appItems = []; // for swi-block and appid-based items
+    let appItems = []; // appid-based
     let freshApps = [];
 
     window.addEventListener('load', init);
 
     function init() {
-        // Scan /game/ links
+        // 1) Normal /game/ links scanning
+        scanMatchesPages();
+
+        // 2) SWI-block scanning
+        scanSWIBlocks();
+
+        // 3) "Offer" page scanning (labels with input[name="game[]"] + a[data-appid])
+        scanOfferItems();
+
+        // 4) Auto-load if desired
+        maybeAutoLoadFresh();
+    }
+
+    // -------------------------------------------------------------------------
+    // A) Lestrades "Matches" scanning
+    // -------------------------------------------------------------------------
+    function scanMatchesPages() {
         const traderHeadings = document.querySelectorAll("h1.trader");
         traderHeadings.forEach((heading) => {
             const matchesTable = heading.nextElementSibling;
@@ -97,7 +113,7 @@
             const gameLinks = matchesTable.querySelectorAll("td a[href^='/game/']");
             gameLinks.forEach((link) => {
                 const gameName = link.textContent.trim();
-                const appIdFromLink = link.getAttribute('data-appid'); // Check for data-appid
+                const appIdFromLink = link.getAttribute('data-appid');
                 const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
 
                 const container = document.createElement('span');
@@ -105,7 +121,9 @@
                 container.style.marginLeft = '5px';
                 container.innerHTML = `
                     <a id="${btnId}" style="cursor: pointer; border:none; outline:none; background:transparent; text-decoration:none;">
-                        <img src="${ICON_URL}" width="14" height="14" title="GG.Deals: Click to load/update price info!" style="border:none; outline:none; background:transparent;"/>
+                        <img src="${ICON_URL}" width="14" height="14"
+                             title="GG.Deals: Click to load/update price info!"
+                             style="border:none; outline:none; background:transparent;"/>
                     </a>
                     <small id="${btnId}_after"></small>
                 `;
@@ -113,9 +131,9 @@
 
                 if (appIdFromLink && !isNaN(appIdFromLink)) {
                     // AppID-based item
-                    appItems.push({appId: appIdFromLink, btnId});
+                    appItems.push({ appId: appIdFromLink, btnId });
 
-                    // Click handler: always refetch ignoring cache
+                    // Always refetch on click
                     const btnElem = document.getElementById(btnId);
                     btnElem.addEventListener('click', () => {
                         fetchItemPriceByAppId(appIdFromLink, (priceInfo, gameTitle) => {
@@ -129,21 +147,21 @@
                         });
                     });
 
+                    // Show cached if fresh or mark as needed
                     const cached = cachedPrices[appIdFromLink];
                     if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
                         const resultElem = document.getElementById(`${btnId}_after`);
                         resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
                     } else if (!cached) {
-                        freshApps.push({btnId, appId: appIdFromLink});
+                        freshApps.push({ btnId, appId: appIdFromLink });
                     } else if (cached && !isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
-                        freshApps.push({btnId, appId: appIdFromLink});
+                        freshApps.push({ btnId, appId: appIdFromLink });
                     }
-
                 } else {
-                    // No appid, name-based item
-                    allItems.push({gameName, btnId});
+                    // Name-based item
+                    allItems.push({ gameName, btnId });
 
-                    // Click handler: always refetch ignoring cache
+                    // Always refetch on click
                     const btnElem = document.getElementById(btnId);
                     btnElem.addEventListener('click', () => {
                         fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
@@ -152,7 +170,7 @@
                             }
                             const resultElem = document.getElementById(`${btnId}_after`);
                             if (resultElem) {
-                                let linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
+                                const linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
                                 resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
                             }
                         });
@@ -163,43 +181,25 @@
                         const resultElem = document.getElementById(`${btnId}_after`);
                         resultElem.innerHTML = ` (<a href="${getItemURL(gameName)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
                     } else if (!cached) {
-                        freshGames.push({btnId, gameName});
+                        freshGames.push({ btnId, gameName });
                     } else if (cached && !isCacheFresh(cached.name || gameName, cached.timestamp)) {
-                        freshGames.push({btnId, gameName});
+                        freshGames.push({ btnId, gameName });
                     }
                 }
             });
         });
+    }
 
-        // SWI-block scanning
+    // -------------------------------------------------------------------------
+    // B) SWI-block scanning
+    // -------------------------------------------------------------------------
+    function scanSWIBlocks() {
         const appDivs = document.querySelectorAll('div.swi-block.swi-boxed[data-appid]');
         appDivs.forEach(div => {
             addAppButton(div);
         });
 
-        // Autoload fresh items if AUTO_CHECK_COUNT > 0 for name items
-        if (AUTO_CHECK_COUNT > 0 && freshGames.length > 0) {
-            const limit = Math.min(AUTO_CHECK_COUNT, freshGames.length);
-            for (let i = 0; i < limit; i++) {
-                setTimeout(() => {
-                    const elem = document.getElementById(freshGames[i].btnId);
-                    if (elem) elem.click();
-                }, 500 * i);
-            }
-        }
-
-        // Autoload fresh app items if AUTO_CHECK_COUNT > 0
-        if (AUTO_CHECK_COUNT > 0 && freshApps.length > 0) {
-            const limit = Math.min(AUTO_CHECK_COUNT, freshApps.length);
-            for (let i = 0; i < limit; i++) {
-                setTimeout(() => {
-                    const elem = document.getElementById(freshApps[i].btnId);
-                    if (elem) elem.click();
-                }, 500 * i);
-            }
-        }
-
-        // MutationObserver for SWI
+        // If new SWI blocks appear after the page load:
         const observer = new MutationObserver(mutations => {
             for (const mutation of mutations) {
                 for (const node of mutation.addedNodes) {
@@ -218,13 +218,11 @@
     }
 
     function addAppButton(div) {
-        // Check if the SWI is showing because of an image
+        // Check if the SWI is showing due to an image
         const parentLink = div.closest('a.swi');
         if (parentLink && parentLink.querySelector('img.swi')) {
-            // SWI is due to image, do not add button
-            return;
+            return; // do not add
         }
-
         if (div.classList.contains('gg-processed')) return;
         div.classList.add('gg-processed');
 
@@ -235,7 +233,8 @@
         container.style.marginLeft = '5px';
         container.innerHTML = `
             <a id="${btnId}" style="cursor:pointer; border:none; outline:none; background:transparent; text-decoration:none;">
-              <img src="${ICON_URL}" title="GG.Deals: Click to load/update price info by AppID!" style="border:none; outline:none; background:transparent; width:14px; height:14px;"/>
+              <img src="${ICON_URL}" title="GG.Deals: Click to load/update price info by AppID!"
+                   style="border:none; outline:none; background:transparent; width:14px; height:14px;"/>
             </a>
             <span id="${btnId}_after" style="font-size:1em"></span>
         `;
@@ -246,9 +245,8 @@
             div.insertAdjacentElement('afterend', container);
         }
 
-        appItems.push({appId, btnId});
+        appItems.push({ appId, btnId });
 
-        // Always refetch on click
         const btnElem = document.getElementById(btnId);
         btnElem.addEventListener('click', () => {
             fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
@@ -267,12 +265,106 @@
             const resultElem = document.getElementById(`${btnId}_after`);
             resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
         } else if (!cached) {
-            freshApps.push({btnId, appId});
+            freshApps.push({ btnId, appId });
         } else if (cached && !isCacheFresh(cached.name || appId, cached.timestamp)) {
-            freshApps.push({btnId, appId});
+            freshApps.push({ btnId, appId });
         }
     }
 
+    // -------------------------------------------------------------------------
+    // C) Offer-page scanning
+    // -------------------------------------------------------------------------
+    function scanOfferItems() {
+        // Look for: <label><input name="game[]" ...> <a data-appid="..."></a> ...
+        const offerInputs = document.querySelectorAll('label input[name="game[]"]');
+        offerInputs.forEach(input => {
+            const label = input.closest('label');
+            if (!label) return;
+
+            const anchor = label.querySelector('a[data-appid]');
+            if (!anchor) return;
+
+            const appId = anchor.getAttribute('data-appid');
+            if (!appId) return; // skip if empty
+
+            // Insert a button just like we do for SWI-block items:
+            if (label.classList.contains('gg-offer-processed')) return;
+            label.classList.add('gg-offer-processed');
+
+            const btnId = `ggdeals_offer_${Math.random().toString(36).substr(2,9)}`;
+            const container = document.createElement('span');
+            container.classList.add('ggdeals-price-container');
+            container.style.marginLeft = '5px';
+            container.innerHTML = `
+                <a id="${btnId}" style="cursor: pointer; border:none; outline:none; background:transparent; text-decoration:none;">
+                    <img src="${ICON_URL}" width="14" height="14"
+                         title="GG.Deals: Click to load/update price info (Offer Page)!"
+                         style="border:none; outline:none; background:transparent;"/>
+                </a>
+                <small id="${btnId}_after"></small>
+            `;
+            label.appendChild(container);
+
+            // For app-based logic
+            appItems.push({ appId, btnId });
+
+            // Always refetch on click
+            const btnElem = document.getElementById(btnId);
+            btnElem.addEventListener('click', () => {
+                fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
+                    if (priceInfo !== "No price found") {
+                        storeInCacheByAppId(appId, priceInfo, gameTitle);
+                    }
+                    const resultElem = document.getElementById(`${btnId}_after`);
+                    if (resultElem) {
+                        resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
+                    }
+                });
+            });
+
+            // Check if we have a fresh cache
+            const cached = cachedPrices[appId];
+            if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appId, cached.timestamp)) {
+                const resultElem = document.getElementById(`${btnId}_after`);
+                resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
+            } else if (!cached) {
+                freshApps.push({ btnId, appId });
+            } else if (cached && !isCacheFresh(cached.name || appId, cached.timestamp)) {
+                freshApps.push({ btnId, appId });
+            }
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // 4) Auto-load logic
+    // -------------------------------------------------------------------------
+    function maybeAutoLoadFresh() {
+        // Autoload fresh name-based items
+        if (AUTO_CHECK_COUNT > 0 && freshGames.length > 0) {
+            const limit = Math.min(AUTO_CHECK_COUNT, freshGames.length);
+            for (let i = 0; i < limit; i++) {
+                setTimeout(() => {
+                    const elem = document.getElementById(freshGames[i].btnId);
+                    if (elem) elem.click();
+                }, 500 * i);
+            }
+        }
+
+        // Autoload fresh app-based items
+        if (AUTO_CHECK_COUNT > 0 && freshApps.length > 0) {
+            const limit = Math.min(AUTO_CHECK_COUNT, freshApps.length);
+            for (let i = 0; i < limit; i++) {
+                setTimeout(() => {
+                    const elem = document.getElementById(freshApps[i].btnId);
+                    if (elem) elem.click();
+                }, 500 * i);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Menu commands: cache view, soft/hard load, etc.
+    // -------------------------------------------------------------------------
     function viewCachedPrices() {
         const now = Date.now();
         const allEntries = Object.entries(cachedPrices).map(([key, data]) => {
@@ -291,9 +383,8 @@
             };
         });
 
-        // Alphabetically sort by gameName
+        // Sort by gameName alphabetically
         allEntries.sort((a, b) => a.gameName.localeCompare(b.gameName));
-
         showPagedPopup(allEntries);
     }
 
@@ -331,12 +422,14 @@
         h1.style.paddingRight = '30px';
         popup.appendChild(h1);
 
+        // Search bar
         const searchDiv = document.createElement('div');
         searchDiv.style.marginBottom = '10px';
         const searchInput = document.createElement('input');
         searchInput.type = 'text';
         searchInput.placeholder = 'Search game name or appid...';
         searchInput.style.marginRight = '5px';
+
         const searchButton = document.createElement('button');
         searchButton.textContent = 'Search';
         searchButton.style.marginRight = '5px';
@@ -347,7 +440,10 @@
         searchButton.addEventListener('click', () => {
             const query = searchInput.value.trim().toLowerCase();
             if (query) {
-                filteredEntries = allEntries.filter(e => e.gameName.toLowerCase().includes(query) || (e.appid && e.appid.toString().includes(query)));
+                filteredEntries = allEntries.filter(e =>
+                    e.gameName.toLowerCase().includes(query) ||
+                    (e.appid && e.appid.toString().includes(query))
+                );
             } else {
                 filteredEntries = [...allEntries];
             }
@@ -374,9 +470,11 @@
 
         const paginationDiv = document.createElement('div');
         paginationDiv.style.marginTop = '10px';
+
         const prevButton = document.createElement('button');
         prevButton.textContent = 'Previous';
         prevButton.style.marginRight = '5px';
+
         const nextButton = document.createElement('button');
         nextButton.textContent = 'Next';
 
@@ -421,7 +519,9 @@
                 return;
             }
 
-            const lines = pageItems.map(e => formatLine(e.gameName, e.price, e.ageStr, e.url, e.appid));
+            const lines = pageItems.map(e =>
+                formatLine(e.gameName, e.price, e.ageStr, e.url, e.appid)
+            );
             resultsDiv.innerHTML = `<pre>${lines.join('\n')}</pre>`;
         }
 
@@ -432,7 +532,7 @@
         let displayPrice = price;
         const nameLower = gameName.toLowerCase();
         if ((nameLower.includes("gems") || nameLower.includes("sack of gems")) && displayPrice.startsWith('$')) {
-            displayPrice = displayPrice + "/1000";
+            displayPrice += "/1000";
         }
 
         let fullName = padRight(gameName, GAME_NAME_WIDTH);
@@ -453,9 +553,8 @@
     function padRight(str, length) {
         if (str.length < length) {
             return str + ' '.repeat(length - str.length);
-        } else {
-            return str;
         }
+        return str;
     }
 
     function clearCachedPrices() {
@@ -467,9 +566,9 @@
     }
 
     function softLoad() {
-        // For gameName items
+        // For name-based items
         allItems.forEach(item => {
-            const {gameName, btnId} = item;
+            const { gameName, btnId } = item;
             const cached = cachedPrices[gameName];
             let shouldLoad = false;
             if (!SHOW_CACHED_IMMEDIATELY) {
@@ -479,7 +578,6 @@
                     shouldLoad = true;
                 }
             }
-
             if (shouldLoad) {
                 const elem = document.getElementById(btnId);
                 if (elem) elem.click();
@@ -488,7 +586,7 @@
 
         // For appId items
         appItems.forEach(item => {
-            const {appId, btnId} = item;
+            const { appId, btnId } = item;
             const cached = cachedPrices[appId];
             let shouldLoad = false;
             if (!SHOW_CACHED_IMMEDIATELY) {
@@ -498,7 +596,6 @@
                     shouldLoad = true;
                 }
             }
-
             if (shouldLoad) {
                 const elem = document.getElementById(btnId);
                 if (elem) elem.click();
@@ -507,9 +604,9 @@
     }
 
     function hardLoad() {
-        // For gameName items
+        // For name-based items
         allItems.forEach(item => {
-            const {gameName, btnId} = item;
+            const { gameName, btnId } = item;
             fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
                 if (priceInfo !== "No price found") {
                     storeInCache(gameName, priceInfo, foundName, foundAppId);
@@ -524,7 +621,7 @@
 
         // For appId items
         appItems.forEach(item => {
-            const {appId, btnId} = item;
+            const { appId, btnId } = item;
             fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
                 if (priceInfo !== "No price found") {
                     storeInCacheByAppId(appId, priceInfo, gameTitle);
@@ -537,17 +634,16 @@
         });
     }
 
-    // -------------------------------
-    // SPECIAL: storeInCache / storeInCacheByAppId
-    // -------------------------------
-
+    // -------------------------------------------------------------------------
+    // Storing in cache
+    // -------------------------------------------------------------------------
     function storeInCache(gameName, priceInfo, foundName, foundAppId) {
         if (foundAppId) {
-            // Remove name-based entry if it exists
+            // If we used to store by gameName, remove that entry
             if (cachedPrices[gameName] && cachedPrices[gameName].appid !== foundAppId) {
                 delete cachedPrices[gameName];
             }
-            // Store by appid only
+            // Store by appId only
             cachedPrices[foundAppId] = {
                 price: priceInfo,
                 name: foundName || gameName,
@@ -555,7 +651,7 @@
                 timestamp: Date.now()
             };
         } else {
-            // No appid available
+            // No appid
             cachedPrices[gameName] = {
                 price: priceInfo,
                 name: foundName || gameName,
@@ -581,14 +677,9 @@
         GM_setValue("cachedPrices", cachedPrices);
     }
 
-    // -------------------------------
-    // Fetch logic
-    // -------------------------------
-
-    // NOTE: fetchItemPriceByName and fetchItemPriceByAppId now always fetch fresh data.
-    //       They do NOT check the cache. This ensures that manual clicks always refetch.
-    //       For auto-load or background usage, see getCachedOrFetchPriceByName() approach (removed now).
-
+    // -------------------------------------------------------------------------
+    // Fetch logic (always fresh on manual click)
+    // -------------------------------------------------------------------------
     function fetchItemPriceByName(gameName, callback) {
         if (gameName === "Gems" || gameName === "Sack of Gems") {
             const url = `https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems`;
@@ -600,7 +691,6 @@
                     const doc = parser.parseFromString(response.responseText, "text/html");
                     let priceElem = doc.querySelector(".market_commodity_orders_header_promote");
                     let price = priceElem ? priceElem.textContent.trim() : "No price found";
-
                     if (price === "No price found") {
                         const alternativeElem = doc.querySelector(".market_listing_price");
                         if (alternativeElem) {
@@ -641,7 +731,6 @@
                 let priceElems = doc.querySelectorAll(".price-inner.numeric");
                 let prices = Array.from(priceElems).map(el => el.textContent.trim());
                 let price;
-
                 if (prices.length === 0) {
                     price = "No price found";
                 } else if (prices.length === 1) {
@@ -654,7 +743,6 @@
 
                 let foundName = null;
                 let foundAppId = null;
-
                 const firstResultLink = doc.querySelector(".game-info-title[href*='/steam/app/']");
                 if (firstResultLink) {
                     const href = firstResultLink.getAttribute('href');
@@ -667,7 +755,6 @@
                         foundName = nameElem.textContent.trim();
                     }
                 }
-
                 callback(price, foundName || gameName, foundAppId);
             },
             onerror: () => callback("No price found", gameName, null),
@@ -707,36 +794,33 @@
         });
     }
 
-    // -------------------------------
-    // URL helper
-    // -------------------------------
+    // -------------------------------------------------------------------------
+    // URL helpers
+    // -------------------------------------------------------------------------
     function getItemURL(gameName) {
         if (gameName === "Gems" || gameName === "Sack of Gems") {
             return `https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems`;
         } else if (gameName === "Mann Co. Supply Crate Key") {
             return `https://mannco.store/item/440-mann-co-supply-crate-key`;
-        } else {
-            return `https://gg.deals/search/?platform=1,2,4,2048,4096,8192&title=${encodeURIComponent(gameName)}`;
         }
+        return `https://gg.deals/search/?platform=1,2,4,2048,4096,8192&title=${encodeURIComponent(gameName)}`;
     }
 
     function getItemURLByAppId(appId) {
         return `https://gg.deals/steam/app/${appId}/`;
     }
 
-    // -------------------------------
-    // Cache / Freshness
-    // -------------------------------
+    // -------------------------------------------------------------------------
+    // Freshness / pruning
+    // -------------------------------------------------------------------------
     function isCacheFresh(gameNameOrId, timestamp) {
         const nameLower = (gameNameOrId + "").toLowerCase();
         const now = Date.now();
         const age = now - timestamp;
-
         if (SPECIAL_ITEMS.some(item => item.toLowerCase() === nameLower)) {
             return age < SPECIAL_CACHE_DURATION;
-        } else {
-            return age < CACHE_DURATION;
         }
+        return age < CACHE_DURATION;
     }
 
     function pruneOldEntries() {
@@ -762,9 +846,8 @@
             return `${ageInMinutes.toFixed(2)} minutes`;
         } else if (ageInHours < 24) {
             return `${ageInHours.toFixed(2)} hours`;
-        } else {
-            return `${ageInDays.toFixed(2)} days`;
         }
+        return `${ageInDays.toFixed(2)} days`;
     }
 
 })();
