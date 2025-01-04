@@ -1,42 +1,36 @@
-# Lestrades-Enhancer
-Integrates GG.Deals prices into lestrades.com
+# GG.Deals Everywhere
+Enhances various Steam trading and gifting sites by integrating price data from GG.Deals and other sources.
 
-Basic Functions of the Script
+## Key Features
 
-This script enhances the functionality of Lestrade's by integrating price data from GG Deals and other sources. Below are its main features:
-1. Price Fetching
+1. **Price Fetching**  
+   - Fetches prices for games and items listed on multiple sites (Lestrades, SteamTrades, Barter.vg, SteamGifts, etc.).  
+   - Special handling for items like “Sack of Gems” and “Mann Co. Supply Crate Key,” fetched from alternate sources.  
+   - Prices are cached locally to reduce redundant requests and improve performance.
 
-    Fetches prices for games listed on Lestrade's from GG Deals.
-    Supports additional price lookups for specific items like "Sack of Gems" and "Mann Co. Supply Crate Key" from external sources.
-    Prices are cached to reduce redundant requests and improve performance.
+2. **Caching**  
+   - Stores price data in local storage.  
+   - Configurable refresh intervals ensure stale prices are automatically updated.  
+   - Automatically purges items older than 30 days.
 
-2. Caching
+3. **Auto-Loading**  
+   - Automatically fetches a configurable number of prices per page at 500ms intervals.  
+   - Optional setting to avoid auto-loading if you prefer manual fetching only.
 
-    Caches price data locally using the browser's localStorage.
-    Cached items are automatically refreshed after a user-configurable time period.
-    Items older than 30 days are purged from the cache automatically.
+4. **User Interface**  
+   - Adds small icons/buttons next to each game/item title to fetch or refresh prices on demand.  
+   - Provides a “View Cached Prices” popup with search and pagination for quick navigation.  
+     - Shows normalized spacing and a human-readable “price age” (e.g., “22.8 hours,” “2.4 days”).  
+   - Includes menu commands for:  
+     - Viewing and searching all cached prices  
+     - Clearing cached data with confirmation  
+     - “Soft Load” (fetch missing prices only)  
+     - “Hard Load” (refresh all prices)
 
-3. Auto-Loading
-
-    Automatically fetches prices for a user-specified number of items on a page at 500ms intervals.
-    Optional setting to disable auto-loading of cached items to improve browser performance.
-
-4. User Interface
-
-    Adds buttons next to game titles to fetch prices on demand.
-    Displays all cached prices in a popup accessible from the userscript menu.
-        Includes search and pagination for easier navigation of cached data.
-        Normalized spacing for better readability, even for long game names.
-        Displays price age in a human-readable format (e.g., "22.8 hours" or "2.4 days").
-    Option to view prices for all uncached items (Soft Load) or refresh all prices (Hard Load).
-
-5. Customization
-
-    Various settings configurable at the top of the script:
-        Number of prices to fetch automatically.
-        Duration for keeping prices cached before refreshing.
-        Toggle for displaying cached prices automatically.
-    Additional button to clear the cache, with a confirmation prompt to prevent accidental deletion.
+5. **Customization**  
+   - All settings (e.g., cache duration, auto-fetch count, etc.) can be tweaked in the script’s config.  
+   - Global rate limit ensures no more than 10 requests per minute.  
+   - Easily enable or disable specific features via built-in config constants.
 
 ## Installation
-Click [here](https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/raw/refs/heads/main/Lestrades-Enhancer.user.js) to install the userscript.
+Click [here](https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/raw/refs/heads/main/GG-Deals-Everywhere.user.js) to install the userscript.
