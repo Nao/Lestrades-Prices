@@ -10,7 +10,7 @@ You need to have SteamWebIntegration installed and running on pages where you wa
 
 1. **Price Fetching**  
    - Fetches prices for games and items listed on multiple sites (Lestrades, SteamTrades, Barter.vg, SteamGifts, etc.).  
-   - Special handling for items like “Sack of Gems” and “Mann Co. Supply Crate Key,” fetched from alternate sources.  
+   - Special handling for items like “Sack of Gems” and “Mann Co. Supply Crate Key,” fetched from alternate sources. *Gems do not currently work*
    - Prices are cached locally to reduce redundant requests and improve performance.
 
 2. **Caching**  
@@ -38,4 +38,25 @@ You need to have SteamWebIntegration installed and running on pages where you wa
    - Easily enable or disable specific features via built-in config constants.
 
 ## Installation
-Click [here](https://github.com/MrAwesomeFalcon/Lestrades-Enhancer/raw/refs/heads/main/GG-Deals-Everywhere.user.js) to install the userscript.
+Click [here](https://github.com/MrAwesomeFalcon/GG-Deals-Everywhere/raw/refs/heads/main/GG-Deals-Everywhere.user.js) to install the userscript.
+
+
+## Images:
+
+Lestrades offer page:
+![Lestrades offer page](https://i.imgur.com/DrKcJ03.png)
+
+
+Lestrades bundle page:
+![Lestrades bundle page](https://i.imgur.com/9c6fneo.png)
+
+
+Steamtrades posts:
+
+![Steamtrades posts](https://i.imgur.com/Irw08Cw.png)
+
+
+It also works inside the [ESGST](https://github.com/rafaelgomesxyz/esgst) popup for filtering tradeables:
+![ESGST popup](https://i.imgur.com/XRVWcF2.png)
+
+
