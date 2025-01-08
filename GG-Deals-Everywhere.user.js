@@ -4,7 +4,6 @@
 // @version      0.4
 // @description  Integrates GG.Deals prices across multiple Steam trading and gifting sites with caching, rate limiting, special-item handling, and one-click price lookups.
 // @match        https://lestrades.com/*
-// @match        https://www.lestrades.com/*
 // @match        https://steamtrades.com/*
 // @match        https://www.steamtrades.com/*
 // @match        https://steamgifts.com/*
@@ -105,16 +104,15 @@
     // A) Lestrades "Matches" scanning
     // -------------------------------------------------------------------------
     function scanMatchesPages() {
-        const traderHeadings = document.querySelectorAll("h1.trader");
+        const traderHeadings = document.querySelectorAll("h1.trader, fieldset.tradables, #new-offer");
         traderHeadings.forEach((heading) => {
-            const matchesTable = heading.nextElementSibling;
-            if (!matchesTable || !matchesTable.matches("table.matches")) return;
-
-            const gameLinks = matchesTable.querySelectorAll("td a[href^='/game/']");
+            const gameLinks = heading.querySelectorAll("a[href^='/game/'][data-appid], a[href^='/game/'][data-subid]");
             gameLinks.forEach((link) => {
                 const gameName = link.textContent.trim();
-                const appIdFromLink = link.getAttribute('data-appid');
+                const appIdFromLink = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
                 const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
+                link.removeAttribute('data-appid');
+                link.removeAttribute('data-subid');
 
                 const container = document.createElement('span');
                 container.classList.add('ggdeals-price-container');
@@ -129,7 +127,7 @@
                 `;
                 link.insertAdjacentElement('afterend', container);
 
-                if (appIdFromLink && !isNaN(appIdFromLink)) {
+                if (appIdFromLink && !isNaN(appIdFromLink.substr(4))) {
                     // AppID-based item
                     appItems.push({ appId: appIdFromLink, btnId });
 
@@ -154,7 +152,7 @@
                         resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
                     } else if (!cached) {
                         freshApps.push({ btnId, appId: appIdFromLink });
-                    } else if (cached && !isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
+                    } else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
                         freshApps.push({ btnId, appId: appIdFromLink });
                     }
                 } else {
@@ -266,7 +264,7 @@
             resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
         } else if (!cached) {
             freshApps.push({ btnId, appId });
-        } else if (cached && !isCacheFresh(cached.name || appId, cached.timestamp)) {
+        } else if (!isCacheFresh(cached.name || appId, cached.timestamp)) {
             freshApps.push({ btnId, appId });
         }
     }
@@ -329,7 +327,7 @@
                 resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
             } else if (!cached) {
                 freshApps.push({ btnId, appId });
-            } else if (cached && !isCacheFresh(cached.name || appId, cached.timestamp)) {
+            } else if (!isCacheFresh(cached.name || appId, cached.timestamp)) {
                 freshApps.push({ btnId, appId });
             }
         });
@@ -650,6 +648,15 @@
                 appid: foundAppId,
                 timestamp: Date.now()
             };
+            if (document.querySelector('#wedge') && foundAppId)
+            {
+                GM_xmlhttpRequest({
+                	method: 'POST',
+                    url: 'https://lestrades.com/?action=ajax;sa=gg',
+                    data: 'gg=' + encodeURI(priceInfo) + '&app=' + foundAppId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+            }
         } else {
             // No appid
             cachedPrices[gameName] = {
@@ -675,6 +682,14 @@
             timestamp: Date.now()
         };
         GM_setValue("cachedPrices", cachedPrices);
+        if (document.querySelector('#wedge')) {
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: 'https://lestrades.com/?action=ajax;sa=gg',
+                data: 'gg=' + encodeURI(priceInfo) + '&app=' + appId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -763,7 +778,7 @@
     }
 
     function fetchItemPriceByAppId(appId, callback) {
-        const url = `https://gg.deals/steam/app/${appId}/`;
+        const url = `https://gg.deals/steam/${appId}/`;
         queueGMRequest({
             method: "GET",
             url: url,
@@ -807,7 +822,7 @@
     }
 
     function getItemURLByAppId(appId) {
-        return `https://gg.deals/steam/app/${appId}/`;
+        return `https://gg.deals/steam/${appId}/`;
     }
 
     // -------------------------------------------------------------------------
