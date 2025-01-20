@@ -106,7 +106,7 @@
     function scanMatchesPages() {
         const traderHeadings = document.querySelectorAll("h1.trader, fieldset.tradables, #new-offer");
         traderHeadings.forEach((heading) => {
-            const gameLinks = heading.querySelectorAll("a[href^='/game/'][data-appid], a[href^='/game/'][data-subid]");
+            const gameLinks = heading.querySelectorAll("a[data-appid], a[data-subid]");
             gameLinks.forEach((link) => {
                 const gameName = link.textContent.trim();
                 const appIdFromLink = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
@@ -224,7 +224,7 @@
         if (div.classList.contains('gg-processed')) return;
         div.classList.add('gg-processed');
 
-        const appId = div.getAttribute('data-appid');
+        const appId = 'app/' + div.getAttribute('data-appid');
         const btnId = `ggdeals_app_btn_${Math.random().toString(36).substr(2,9)}`;
         const container = document.createElement('span');
         container.classList.add('ggdeals-price-container');
@@ -279,10 +279,10 @@
             const label = input.closest('label');
             if (!label) return;
 
-            const anchor = label.querySelector('a[data-appid]');
+            const anchor = label.querySelector('a[data-appid],a[data-subid]');
             if (!anchor) return;
 
-            const appId = anchor.getAttribute('data-appid');
+            const appId = anchor.getAttribute('data-appid') ? 'app/' + anchor.getAttribute('data-appid') : 'sub/' + anchor.getAttribute('data-subid');
             if (!appId) return; // skip if empty
 
             // Insert a button just like we do for SWI-block items:
@@ -761,7 +761,7 @@
                 const firstResultLink = doc.querySelector(".game-info-title[href*='/steam/app/']");
                 if (firstResultLink) {
                     const href = firstResultLink.getAttribute('href');
-                    const appIdMatch = href.match(/\/steam\/app\/(\d+)\//);
+                    const appIdMatch = href.match(/\/steam\/(app\/\d+)\//);
                     if (appIdMatch) {
                         foundAppId = appIdMatch[1];
                     }
