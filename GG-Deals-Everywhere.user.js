@@ -46,16 +46,8 @@
     // REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/6 seconds)
     const REQUEST_INTERVAL_MS = 6000; // 6 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
     let requestQueue = [];
-    setInterval(() => {
-        if (requestQueue.length > 0) {
-            const nextReq = requestQueue.shift();
-            GM_xmlhttpRequest(nextReq);
-        }
-    }, REQUEST_INTERVAL_MS);
-
-    function queueGMRequest(options) {
-        requestQueue.push(options);
-    }
+	setTimeout(execRequest, 1000); // Do it a first time once we have a chance to fill in that queue.
+    setInterval(execRequest, REQUEST_INTERVAL_MS);
 
     GM_addStyle(`
         .ggdeals-price-container {
@@ -100,11 +92,20 @@
         maybeAutoLoadFresh();
     }
 
+	function execRequest() {
+		if (requestQueue.length)
+            GM_xmlhttpRequest(requestQueue.shift());
+	}
+
+    function queueGMRequest(options) {
+		requestQueue.push(options);
+    }
+
     // -------------------------------------------------------------------------
     // A) Lestrades "Matches" scanning
     // -------------------------------------------------------------------------
     function scanMatchesPages() {
-        const traderHeadings = document.querySelectorAll("h1.trader, fieldset.tradables, #new-offer");
+        const traderHeadings = document.querySelectorAll("table.matches, fieldset.tradables, #new-offer");
         traderHeadings.forEach((heading) => {
             const gameLinks = heading.querySelectorAll("a[data-appid], a[data-subid]");
             gameLinks.forEach((link) => {
@@ -698,7 +699,7 @@
     function fetchItemPriceByName(gameName, callback) {
         if (gameName === "Gems" || gameName === "Sack of Gems") {
             const url = `https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems`;
-            queueGMRequest({
+            GM_xmlhttpRequest({
                 method: "GET",
                 url: url,
                 onload: (response) => {
@@ -720,7 +721,7 @@
             return;
         } else if (gameName === "Mann Co. Supply Crate Key") {
             const url = `https://mannco.store/item/440-mann-co-supply-crate-key`;
-            queueGMRequest({
+            GM_xmlhttpRequest({
                 method: "GET",
                 url: url,
                 onload: (response) => {
