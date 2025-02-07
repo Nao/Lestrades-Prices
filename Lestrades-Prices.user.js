@@ -45,7 +45,6 @@
 	setTimeout(execRequest, 1000); // Do it a first time once we have a chance to fill in that queue.
 	setInterval(execRequest, REQUEST_INTERVAL_MS);
 
-
 	GM_addStyle(`
 		.ggdeals-price-container {
 			display: inline-block !important;
@@ -89,6 +88,13 @@
 		// 2) Auto-load if desired
 		maybeAutoLoadFresh();
 	}
+
+	function execRequest() {
+		if (requestQueue.length)
+			GM_xmlhttpRequest(requestQueue.shift());
+	}
+
+	function queueGMRequest(req) { requestQueue.push(req); }
 
 	// -------------------------------------------------------------------------
 	// 1) Scanning for app IDs across Lestrade's
