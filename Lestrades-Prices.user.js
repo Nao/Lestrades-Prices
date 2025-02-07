@@ -56,6 +56,10 @@
 		.ggdeals-price-container * {
 			line-height: 1 !important;
 		}
+		.ggdeals-price-container small {
+		    position: relative;
+			top: -3px;
+		}
 	`);
 
 	let cachedPrices = GM_getValue("cachedPrices", {});
