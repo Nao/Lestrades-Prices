@@ -1,15 +1,9 @@
 // ==UserScript==
 // @name         GG.Deals Everywhere
-// @namespace    MrAwesomeFalcon
-// @version      0.4
+// @namespace    https://lestrades.com
+// @version      0.5
 // @description  Integrates GG.Deals prices across multiple Steam trading and gifting sites with caching, rate limiting, special-item handling, and one-click price lookups.
 // @match        https://lestrades.com/*
-// @match        https://steamtrades.com/*
-// @match        https://www.steamtrades.com/*
-// @match        https://steamgifts.com/*
-// @match        https://www.steamgifts.com/*
-// @match        https://barter.vg/*
-// @match        https://www.barter.vg/*
 // @connect      gg.deals
 // @connect      steamcommunity.com
 // @connect      mannco.store
@@ -19,17 +13,19 @@
 // @grant        GM_registerMenuCommand
 // @grant        GM_addStyle
 // @run-at       document-end
-// @homepageURL  https://github.com/MrAwesomeFalcon/GG-Deals-Everywhere/
-// @supportURL   https://github.com/MrAwesomeFalcon/GG-Deals-Everywhere/issues
-// @downloadURL  https://github.com/MrAwesomeFalcon/GG-Deals-Everywhere/blob/main/GG-Deals-Everywhere.user.js
-// @updateURL    https://github.com/MrAwesomeFalcon/GG-Deals-Everywhere/blob/main/GG-Deals-Everywhere.user.js
+// @homepageURL  https://github.com/Nao/Lestrades-Prices/
+// @supportURL   https://github.com/Nao/Lestrades-Prices/issues
+// @downloadURL  https://github.com/Nao/Lestrades-Prices/blob/main/Lestrades-Prices.user.js
+// @updateURL    https://github.com/Nao/Lestrades-Prices/blob/main/Lestrades-Prices.user.js
 // ==/UserScript==
+
+// Original author: MrAwesomeFalcon
+// Fiddled with by: Nao
 
 (function() {
     'use strict';
 
     // CONFIG
-    const INSERT_GG_BEFORE_SWI = false;
     const AUTO_CHECK_COUNT = 0; // number of prices to automatically check every page load. CAREFUL this will almost certainly rate limit you immediately.
     const CACHE_DURATION = 7 * 24 * 60 * 60 * 1000; // one week
     const SHOW_CACHED_IMMEDIATELY = true; // load items from the cache
@@ -46,12 +42,23 @@
     // REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/6 seconds)
     const REQUEST_INTERVAL_MS = 6000; // 6 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
     let requestQueue = [];
-	setTimeout(execRequest, 1000); // Do it a first time once we have a chance to fill in that queue.
-    setInterval(execRequest, REQUEST_INTERVAL_MS);
+    setInterval(() => {
+        if (requestQueue.length > 0) {
+            const nextReq = requestQueue.shift();
+            GM_xmlhttpRequest(nextReq);
+        }
+    }, REQUEST_INTERVAL_MS);
+
+    function queueGMRequest(options) {
+        requestQueue.push(options);
+    }
 
     GM_addStyle(`
         .ggdeals-price-container {
             display: inline-block !important;
+            position: relative;
+            margin: 0 4px 4px 3px;
+            top: 3px;
         }
         .ggdeals-price-container * {
             line-height: 1 !important;
@@ -80,262 +87,96 @@
 
     function init() {
         // 1) Normal /game/ links scanning
-        scanMatchesPages();
+        scanLestrades();
 
-        // 2) SWI-block scanning
-        scanSWIBlocks();
-
-        // 3) "Offer" page scanning (labels with input[name="game[]"] + a[data-appid])
-        scanOfferItems();
-
-        // 4) Auto-load if desired
+        // 2) Auto-load if desired
         maybeAutoLoadFresh();
     }
 
-    function execRequest() {
-        if (requestQueue.length)
-            GM_xmlhttpRequest(requestQueue.shift());
-    }
-
-    function queueGMRequest(options) {
-        requestQueue.push(options);
-    }
-
     // -------------------------------------------------------------------------
-    // A) Lestrades "Matches" scanning
+    // 1) Scanning for app IDs across Lestrade's
     // -------------------------------------------------------------------------
-    function scanMatchesPages() {
-        const traderHeadings = document.querySelectorAll("table.matches, fieldset.tradables, #new-offer");
-        traderHeadings.forEach((heading) => {
-            const gameLinks = heading.querySelectorAll("a[data-appid], a[data-subid]");
-            gameLinks.forEach((link) => {
-                const gameName = link.textContent.trim();
-                const appIdFromLink = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
-                const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
-                link.removeAttribute('data-appid');
-                link.removeAttribute('data-subid');
+    function scanLestrades() {
+		const gameLinks = document.querySelectorAll("a[href^='/game/'][data-appid], a[href^='/game/'][data-subid]");
+		gameLinks.forEach((link) => {
+			const gameName = link.textContent.trim();
+			const appIdFromLink = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
+			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
 
-                const container = document.createElement('span');
-                container.classList.add('ggdeals-price-container');
-                container.style.marginLeft = '5px';
-                container.innerHTML = `
-                    <a id="${btnId}" style="cursor: pointer; border:none; outline:none; background:transparent; text-decoration:none;">
-                        <img src="${ICON_URL}" width="14" height="14"
-                             title="GG.Deals: Click to load/update price info!"
-                             style="border:none; outline:none; background:transparent;"/>
-                    </a>
-                    <small id="${btnId}_after"></small>
-                `;
-                link.insertAdjacentElement('afterend', container);
+			const container = document.createElement('span');
+			container.classList.add('ggdeals-price-container');
+			container.innerHTML = `
+				<a id="${btnId}" style="cursor: pointer; border:none; outline:none; background:transparent; text-decoration:none;">
+					<img src="${ICON_URL}" width="14" height="14"
+						 title="GG.Deals: Click to load/update price info!"
+						 style="border:none; outline:none; background:transparent;"/>
+				</a>
+				<small id="${btnId}_after"></small>
+			`;
+			link.insertAdjacentElement('afterend', container);
 
-                if (appIdFromLink && !isNaN(appIdFromLink.substr(4))) {
-                    // AppID-based item
-                    appItems.push({ appId: appIdFromLink, btnId });
+			if (appIdFromLink) {
+				// AppID-based item
+				appItems.push({ appId: appIdFromLink, btnId });
 
-                    // Always refetch on click
-                    const btnElem = document.getElementById(btnId);
-                    btnElem.addEventListener('click', () => {
-                        fetchItemPriceByAppId(appIdFromLink, (priceInfo, gameTitle) => {
-                            if (priceInfo !== "No price found") {
-                                storeInCacheByAppId(appIdFromLink, priceInfo, gameTitle);
-                            }
-                            const resultElem = document.getElementById(`${btnId}_after`);
-                            if (resultElem) {
-                                resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
-                            }
-                        });
-                    });
+				// Always refetch on click
+				const btnElem = document.getElementById(btnId);
+				btnElem.addEventListener('click', () => {
+					fetchItemPriceByAppId(appIdFromLink, (priceInfo, gameTitle) => {
+						if (priceInfo !== "No price found") {
+							storeInCacheByAppId(appIdFromLink, priceInfo, gameTitle);
+						}
+						const resultElem = document.getElementById(`${btnId}_after`);
+						if (resultElem) {
+							resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
+						}
+					});
+				});
 
-                    // Show cached if fresh or mark as needed
-                    const cached = cachedPrices[appIdFromLink];
-                    if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
-                        const resultElem = document.getElementById(`${btnId}_after`);
-                        resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
-                    } else if (!cached) {
-                        freshApps.push({ btnId, appId: appIdFromLink });
-                    } else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
-                        freshApps.push({ btnId, appId: appIdFromLink });
-                    }
-                } else {
-                    // Name-based item
-                    allItems.push({ gameName, btnId });
+				// Show cached if fresh or mark as needed
+				const cached = cachedPrices[appIdFromLink];
+				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
+					const resultElem = document.getElementById(`${btnId}_after`);
+					resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
+				} else if (!cached) {
+					freshApps.push({ btnId, appId: appIdFromLink });
+				} else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
+					freshApps.push({ btnId, appId: appIdFromLink });
+				}
+			} else {
+				// Name-based item
+				allItems.push({ gameName, btnId });
 
-                    // Always refetch on click
-                    const btnElem = document.getElementById(btnId);
-                    btnElem.addEventListener('click', () => {
-                        fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
-                            if (priceInfo !== "No price found") {
-                                storeInCache(gameName, priceInfo, foundName, foundAppId);
-                            }
-                            const resultElem = document.getElementById(`${btnId}_after`);
-                            if (resultElem) {
-                                const linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
-                                resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
-                            }
-                        });
-                    });
+				// Always refetch on click
+				const btnElem = document.getElementById(btnId);
+				btnElem.addEventListener('click', () => {
+					fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
+						if (priceInfo !== "No price found") {
+							storeInCache(gameName, priceInfo, foundName, foundAppId);
+						}
+						const resultElem = document.getElementById(`${btnId}_after`);
+						if (resultElem) {
+							const linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
+							resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
+						}
+					});
+				});
 
-                    const cached = cachedPrices[gameName];
-                    if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || gameName, cached.timestamp)) {
-                        const resultElem = document.getElementById(`${btnId}_after`);
-                        resultElem.innerHTML = ` (<a href="${getItemURL(gameName)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
-                    } else if (!cached) {
-                        freshGames.push({ btnId, gameName });
-                    } else if (cached && !isCacheFresh(cached.name || gameName, cached.timestamp)) {
-                        freshGames.push({ btnId, gameName });
-                    }
-                }
-            });
-        });
+				const cached = cachedPrices[gameName];
+				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || gameName, cached.timestamp)) {
+					const resultElem = document.getElementById(`${btnId}_after`);
+					resultElem.innerHTML = ` (<a href="${getItemURL(gameName)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
+				} else if (!cached) {
+					freshGames.push({ btnId, gameName });
+				} else if (cached && !isCacheFresh(cached.name || gameName, cached.timestamp)) {
+					freshGames.push({ btnId, gameName });
+				}
+			}
+		});
     }
 
     // -------------------------------------------------------------------------
-    // B) SWI-block scanning
-    // -------------------------------------------------------------------------
-    function scanSWIBlocks() {
-        const appDivs = document.querySelectorAll('div.swi-block.swi-boxed[data-appid]');
-        appDivs.forEach(div => {
-            addAppButton(div);
-        });
-
-        // If new SWI blocks appear after the page load:
-        const observer = new MutationObserver(mutations => {
-            for (const mutation of mutations) {
-                for (const node of mutation.addedNodes) {
-                    if (node.nodeType === Node.ELEMENT_NODE) {
-                        const newDivs = node.matches?.('div.swi-block.swi-boxed[data-appid]')
-                            ? [node]
-                            : node.querySelectorAll?.('div.swi-block.swi-boxed[data-appid]') || [];
-                        newDivs.forEach(div => {
-                            addAppButton(div);
-                        });
-                    }
-                }
-            }
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-    }
-
-    function addAppButton(div) {
-        // Check if the SWI is showing due to an image
-        const parentLink = div.closest('a.swi');
-        if (parentLink && parentLink.querySelector('img.swi')) {
-            return; // do not add
-        }
-        if (div.classList.contains('gg-processed')) return;
-        div.classList.add('gg-processed');
-
-        const appId = 'app/' + div.getAttribute('data-appid');
-        const btnId = `ggdeals_app_btn_${Math.random().toString(36).substr(2,9)}`;
-        const container = document.createElement('span');
-        container.classList.add('ggdeals-price-container');
-        container.style.marginLeft = '5px';
-        container.innerHTML = `
-            <a id="${btnId}" style="cursor:pointer; border:none; outline:none; background:transparent; text-decoration:none;">
-              <img src="${ICON_URL}" title="GG.Deals: Click to load/update price info by AppID!"
-                   style="border:none; outline:none; background:transparent; width:14px; height:14px;"/>
-            </a>
-            <span id="${btnId}_after" style="font-size:1em"></span>
-        `;
-
-        if (INSERT_GG_BEFORE_SWI) {
-            div.insertAdjacentElement('beforebegin', container);
-        } else {
-            div.insertAdjacentElement('afterend', container);
-        }
-
-        appItems.push({ appId, btnId });
-
-        const btnElem = document.getElementById(btnId);
-        btnElem.addEventListener('click', () => {
-            fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
-                if (priceInfo !== "No price found") {
-                    storeInCacheByAppId(appId, priceInfo, gameTitle);
-                }
-                const resultElem = document.getElementById(`${btnId}_after`);
-                if (resultElem) {
-                    resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
-                }
-            });
-        });
-
-        const cached = cachedPrices[appId];
-        if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appId, cached.timestamp)) {
-            const resultElem = document.getElementById(`${btnId}_after`);
-            resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
-        } else if (!cached) {
-            freshApps.push({ btnId, appId });
-        } else if (!isCacheFresh(cached.name || appId, cached.timestamp)) {
-            freshApps.push({ btnId, appId });
-        }
-    }
-
-    // -------------------------------------------------------------------------
-    // C) Offer-page scanning
-    // -------------------------------------------------------------------------
-    function scanOfferItems() {
-        // Look for: <label><input name="game[]" ...> <a data-appid="..."></a> ...
-        const offerInputs = document.querySelectorAll('label input[name="game[]"]');
-        offerInputs.forEach(input => {
-            const label = input.closest('label');
-            if (!label) return;
-
-            const anchor = label.querySelector('a[data-appid],a[data-subid]');
-            if (!anchor) return;
-
-            const appId = anchor.getAttribute('data-appid') ? 'app/' + anchor.getAttribute('data-appid') : 'sub/' + anchor.getAttribute('data-subid');
-            if (!appId) return; // skip if empty
-
-            // Insert a button just like we do for SWI-block items:
-            if (label.classList.contains('gg-offer-processed')) return;
-            label.classList.add('gg-offer-processed');
-
-            const btnId = `ggdeals_offer_${Math.random().toString(36).substr(2,9)}`;
-            const container = document.createElement('span');
-            container.classList.add('ggdeals-price-container');
-            container.style.marginLeft = '5px';
-            container.innerHTML = `
-                <a id="${btnId}" style="cursor: pointer; border:none; outline:none; background:transparent; text-decoration:none;">
-                    <img src="${ICON_URL}" width="14" height="14"
-                         title="GG.Deals: Click to load/update price info (Offer Page)!"
-                         style="border:none; outline:none; background:transparent;"/>
-                </a>
-                <small id="${btnId}_after"></small>
-            `;
-            label.appendChild(container);
-
-            // For app-based logic
-            appItems.push({ appId, btnId });
-
-            // Always refetch on click
-            const btnElem = document.getElementById(btnId);
-            btnElem.addEventListener('click', () => {
-                fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
-                    if (priceInfo !== "No price found") {
-                        storeInCacheByAppId(appId, priceInfo, gameTitle);
-                    }
-                    const resultElem = document.getElementById(`${btnId}_after`);
-                    if (resultElem) {
-                        resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
-                    }
-                });
-            });
-
-            // Check if we have a fresh cache
-            const cached = cachedPrices[appId];
-            if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appId, cached.timestamp)) {
-                const resultElem = document.getElementById(`${btnId}_after`);
-                resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
-            } else if (!cached) {
-                freshApps.push({ btnId, appId });
-            } else if (!isCacheFresh(cached.name || appId, cached.timestamp)) {
-                freshApps.push({ btnId, appId });
-            }
-        });
-    }
-
-    // -------------------------------------------------------------------------
-    // 4) Auto-load logic
+    // 2) Auto-load logic
     // -------------------------------------------------------------------------
     function maybeAutoLoadFresh() {
         // Autoload fresh name-based items
@@ -369,7 +210,7 @@
         const allEntries = Object.entries(cachedPrices).map(([key, data]) => {
             const ageMs = now - data.timestamp;
             const ageStr = formatAge(ageMs);
-            const isAppId = !isNaN(key);
+            const isAppId = key.match("^((app|sub)/)?\d+$");
             let usedName = data.name || key;
             const url = data.appid ? getItemURLByAppId(data.appid) : getItemURL(usedName);
 
@@ -649,15 +490,12 @@
                 appid: foundAppId,
                 timestamp: Date.now()
             };
-            if (document.querySelector('#wedge') && foundAppId)
-            {
+            if (querySelector('#wedge') && foundAppId)
                 GM_xmlhttpRequest({
-                	method: 'POST',
-                    url: 'https://lestrades.com/?action=ajax;sa=gg',
-                    data: 'gg=' + encodeURI(priceInfo) + '&app=' + foundAppId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                	method: "POST",
+                    url: 'https://lestrades.com/?action=ajax;sa=gg;gg=' + price + ';app=' + foundAppID + ';' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid
                 });
-            }
+
         } else {
             // No appid
             cachedPrices[gameName] = {
@@ -683,14 +521,6 @@
             timestamp: Date.now()
         };
         GM_setValue("cachedPrices", cachedPrices);
-        if (document.querySelector('#wedge')) {
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: 'https://lestrades.com/?action=ajax;sa=gg',
-                data: 'gg=' + encodeURI(priceInfo) + '&app=' + appId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-            });
-        }
     }
 
     // -------------------------------------------------------------------------
@@ -699,7 +529,7 @@
     function fetchItemPriceByName(gameName, callback) {
         if (gameName === "Gems" || gameName === "Sack of Gems") {
             const url = `https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems`;
-            GM_xmlhttpRequest({
+            queueGMRequest({
                 method: "GET",
                 url: url,
                 onload: (response) => {
@@ -721,7 +551,7 @@
             return;
         } else if (gameName === "Mann Co. Supply Crate Key") {
             const url = `https://mannco.store/item/440-mann-co-supply-crate-key`;
-            GM_xmlhttpRequest({
+            queueGMRequest({
                 method: "GET",
                 url: url,
                 onload: (response) => {
@@ -749,9 +579,9 @@
                 let price;
                 if (prices.length === 0) {
                     price = "No price found";
-                } else if (prices.length === 1 && /^~?\$\d+/.test(prices[0])) {
+                } else if (prices.length === 1) {
                     price = prices[0];
-                } else if (/^~?\$\d+/.test(prices[0]) && /^~?\$\d+/.test(prices[1])) {
+                } else {
                     let officialPrice = prices[0];
                     let keyshopPrice = prices[1];
                     price = `${officialPrice} | ${keyshopPrice}`;
@@ -762,7 +592,7 @@
                 const firstResultLink = doc.querySelector(".game-info-title[href*='/steam/app/']");
                 if (firstResultLink) {
                     const href = firstResultLink.getAttribute('href');
-                    const appIdMatch = href.match(/\/steam\/(app\/\d+)\//);
+                    const appIdMatch = href.match(/\/steam\/app\/(\d+)\//);
                     if (appIdMatch) {
                         foundAppId = appIdMatch[1];
                     }
@@ -792,9 +622,9 @@
 
                 if (prices.length === 0) {
                     price = "No price found";
-                } else if (prices.length === 1 && /^~?\$\d+/.test(prices[0])) {
+                } else if (prices.length === 1) {
                     price = prices[0];
-                } else if (/^~?\$\d+/.test(prices[0]) && /^~?\$\d+/.test(prices[1])) {
+                } else {
                     let officialPrice = prices[0];
                     let keyshopPrice = prices[1];
                     price = `${officialPrice} | ${keyshopPrice}`;
