@@ -42,16 +42,9 @@
     // REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/6 seconds)
     const REQUEST_INTERVAL_MS = 6000; // 6 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
     let requestQueue = [];
-    setInterval(() => {
-        if (requestQueue.length > 0) {
-            const nextReq = requestQueue.shift();
-            GM_xmlhttpRequest(nextReq);
-        }
-    }, REQUEST_INTERVAL_MS);
+    setTimeout(execRequest, 1000); // Do it a first time once we have a chance to fill in that queue.
+    setInterval(execRequest, REQUEST_INTERVAL_MS);
 
-    function queueGMRequest(options) {
-        requestQueue.push(options);
-    }
 
     GM_addStyle(`
         .ggdeals-price-container {
@@ -97,11 +90,13 @@
     // 1) Scanning for app IDs across Lestrade's
     // -------------------------------------------------------------------------
     function scanLestrades() {
-		const gameLinks = document.querySelectorAll("a[href^='/game/'][data-appid], a[href^='/game/'][data-subid]");
+		const gameLinks = document.querySelectorAll("a[data-appid], a[data-subid]");
 		gameLinks.forEach((link) => {
 			const gameName = link.textContent.trim();
 			const appIdFromLink = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
 			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
+      link.removeAttribute('data-appid');
+      link.removeAttribute('data-subid');
 
 			const container = document.createElement('span');
 			container.classList.add('ggdeals-price-container');
@@ -115,7 +110,7 @@
 			`;
 			link.insertAdjacentElement('afterend', container);
 
-			if (appIdFromLink) {
+      if (appIdFromLink && !isNaN(appIdFromLink.substr(4))) {
 				// AppID-based item
 				appItems.push({ appId: appIdFromLink, btnId });
 
@@ -210,7 +205,7 @@
         const allEntries = Object.entries(cachedPrices).map(([key, data]) => {
             const ageMs = now - data.timestamp;
             const ageStr = formatAge(ageMs);
-            const isAppId = key.match("^((app|sub)/)?\d+$");
+            const isAppId = !isNaN(key.substr(4));
             let usedName = data.name || key;
             const url = data.appid ? getItemURLByAppId(data.appid) : getItemURL(usedName);
 
@@ -490,10 +485,12 @@
                 appid: foundAppId,
                 timestamp: Date.now()
             };
-            if (querySelector('#wedge') && foundAppId)
+            if (document.querySelector('#wedge') && foundAppId)
                 GM_xmlhttpRequest({
-                	method: "POST",
-                    url: 'https://lestrades.com/?action=ajax;sa=gg;gg=' + price + ';app=' + foundAppID + ';' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid
+                	method: 'POST',
+                    url: 'https://lestrades.com/?action=ajax;sa=gg',
+                    data: 'gg=' + encodeURI(priceInfo) + '&app=' + foundAppId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
                 });
 
         } else {
@@ -521,6 +518,13 @@
             timestamp: Date.now()
         };
         GM_setValue("cachedPrices", cachedPrices);
+        if (document.querySelector('#wedge'))
+            GM_xmlhttpRequest({
+                method: 'POST',
+                url: 'https://lestrades.com/?action=ajax;sa=gg',
+                data: 'gg=' + encodeURI(priceInfo) + '&app=' + appId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+            });
     }
 
     // -------------------------------------------------------------------------
@@ -529,7 +533,7 @@
     function fetchItemPriceByName(gameName, callback) {
         if (gameName === "Gems" || gameName === "Sack of Gems") {
             const url = `https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems`;
-            queueGMRequest({
+            GM_xmlhttpRequest({
                 method: "GET",
                 url: url,
                 onload: (response) => {
@@ -551,7 +555,7 @@
             return;
         } else if (gameName === "Mann Co. Supply Crate Key") {
             const url = `https://mannco.store/item/440-mann-co-supply-crate-key`;
-            queueGMRequest({
+            GM_xmlhttpRequest({
                 method: "GET",
                 url: url,
                 onload: (response) => {
@@ -579,9 +583,9 @@
                 let price;
                 if (prices.length === 0) {
                     price = "No price found";
-                } else if (prices.length === 1) {
+                } else if (prices.length === 1 && /~? ?\$\d+/.test(prices[0])) {
                     price = prices[0];
-                } else {
+                } else if (/~? ?\$\d+/.test(prices[0]) && /~? ?\$\d+/.test(prices[1])) {
                     let officialPrice = prices[0];
                     let keyshopPrice = prices[1];
                     price = `${officialPrice} | ${keyshopPrice}`;
@@ -592,7 +596,7 @@
                 const firstResultLink = doc.querySelector(".game-info-title[href*='/steam/app/']");
                 if (firstResultLink) {
                     const href = firstResultLink.getAttribute('href');
-                    const appIdMatch = href.match(/\/steam\/app\/(\d+)\//);
+                    const appIdMatch = href.match(/\/steam\/((?:app|sub)\/\d+)\//);
                     if (appIdMatch) {
                         foundAppId = appIdMatch[1];
                     }
@@ -622,9 +626,9 @@
 
                 if (prices.length === 0) {
                     price = "No price found";
-                } else if (prices.length === 1) {
+                } else if (prices.length === 1 && /~? ?\$\d+/.test(prices[0])) {
                     price = prices[0];
-                } else {
+                } else if (/~? ?\$\d+/.test(prices[0]) && /~? ?\$\d+/.test(prices[1])) {
                     let officialPrice = prices[0];
                     let keyshopPrice = prices[1];
                     price = `${officialPrice} | ${keyshopPrice}`;
