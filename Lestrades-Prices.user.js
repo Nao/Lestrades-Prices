@@ -593,9 +593,9 @@
 				let price;
 				if (prices.length === 0) {
 					price = "No price found";
-				} else if (prices.length === 1 && /~? ?\$\d+/.test(prices[0])) {
+				} else if (prices.length === 1 && /^~? ?\$\d+/.test(prices[0])) {
 					price = prices[0];
-				} else if (/~? ?\$\d+/.test(prices[0]) && /~? ?\$\d+/.test(prices[1])) {
+				} else if (/^~? ?\$\d+/.test(prices[0]) && /^~? ?\$\d+/.test(prices[1])) {
 					let officialPrice = prices[0];
 					let keyshopPrice = prices[1];
 					price = `${officialPrice} | ${keyshopPrice}`;
@@ -636,9 +636,9 @@
 
 				if (prices.length === 0) {
 					price = "No price found";
-				} else if (prices.length === 1 && /~? ?\$\d+/.test(prices[0])) {
+				} else if (prices.length === 1 && /^~? ?\$\d+/.test(prices[0])) {
 					price = prices[0];
-				} else if (/~? ?\$\d+/.test(prices[0]) && /~? ?\$\d+/.test(prices[1])) {
+				} else if (/^~? ?\$\d+/.test(prices[0]) && /^~? ?\$\d+/.test(prices[1])) {
 					let officialPrice = prices[0];
 					let keyshopPrice = prices[1];
 					price = `${officialPrice} | ${keyshopPrice}`;
