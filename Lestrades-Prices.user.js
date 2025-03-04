@@ -552,7 +552,7 @@
 		let price, prices, ld = doc.querySelector('script[type="application/ld+json"]');
 		prices = doc.querySelectorAll(':is(#official-stores, #keyshops) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
 		price = Array.from(prices).map(el => el.textContent.replace(/~/g, '').trim()).join('|'); // Remove ~ (we know it's an approximation!) and spaces.
-		if (/[\d,.$€|]+/.test(price)) // If ld didn't return, we may have an empty game page.
+		if (/[\d,.$€|]+/.test(price) || ld === null)
 			return (JSON.parse(ld?.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
 		return PRICE_ERROR;
 	}
