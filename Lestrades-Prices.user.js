@@ -91,7 +91,6 @@
 	}
 
 	function execRequest() {
-        console.log(requestQueue);
 		if (requestQueue.length)
 			GM_xmlhttpRequest(requestQueue.shift());
 	}
