@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name		 Lestrade's Prices
 // @namespace	https://lestrades.com
-// @version	  0.5
+// @version	  0.6
 // @description  Integrates GG.Deals prices on Lestrades.com with caching, rate limiting, special-item handling, and one-click price lookups.
 // @match		https://lestrades.com/*
 // @connect	  gg.deals
@@ -33,6 +33,7 @@
 	const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
 	const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon
+	const PRICE_ERROR = 'No price found';
 	// https://imgur.com/a/dTvpB2K Album of custom icons I made
 
 	// Special items settings
@@ -128,12 +129,13 @@
 				const btnElem = document.getElementById(btnId);
 				btnElem.addEventListener('click', () => {
 					fetchItemPriceByAppId(appIdFromLink, (priceInfo, gameTitle) => {
-						if (priceInfo !== "No price found") {
+						if (priceInfo !== PRICE_ERROR) {
 							storeInCacheByAppId(appIdFromLink, priceInfo, gameTitle);
 						}
 						const resultElem = document.getElementById(`${btnId}_after`);
 						if (resultElem) {
-							resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
+							let show = priceInfo.split('|'); // Only show the (normally) lowest price; skip currency.
+							resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
 						}
 					});
 				});
@@ -156,7 +158,7 @@
 				const btnElem = document.getElementById(btnId);
 				btnElem.addEventListener('click', () => {
 					fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
-						if (priceInfo !== "No price found") {
+						if (priceInfo !== PRICE_ERROR) {
 							storeInCache(gameName, priceInfo, foundName, foundAppId);
 						}
 						const resultElem = document.getElementById(`${btnId}_after`);
@@ -419,7 +421,7 @@
 			if (!SHOW_CACHED_IMMEDIATELY) {
 				shouldLoad = true;
 			} else {
-				if (!cached || !isCacheFresh(cached.name || gameName, cached.timestamp) || cached.price === "No price found") {
+				if (!cached || !isCacheFresh(cached.name || gameName, cached.timestamp) || cached.price === PRICE_ERROR) {
 					shouldLoad = true;
 				}
 			}
@@ -437,7 +439,7 @@
 			if (!SHOW_CACHED_IMMEDIATELY) {
 				shouldLoad = true;
 			} else {
-				if (!cached || !isCacheFresh(cached.name || appId, cached.timestamp) || cached.price === "No price found") {
+				if (!cached || !isCacheFresh(cached.name || appId, cached.timestamp) || cached.price === PRICE_ERROR) {
 					shouldLoad = true;
 				}
 			}
@@ -453,7 +455,7 @@
 		allItems.forEach(item => {
 			const { gameName, btnId } = item;
 			fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
-				if (priceInfo !== "No price found") {
+				if (priceInfo !== PRICE_ERROR) {
 					storeInCache(gameName, priceInfo, foundName, foundAppId);
 				}
 				const resultElem = document.getElementById(`${btnId}_after`);
@@ -468,7 +470,7 @@
 		appItems.forEach(item => {
 			const { appId, btnId } = item;
 			fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
-				if (priceInfo !== "No price found") {
+				if (priceInfo !== PRICE_ERROR) {
 					storeInCacheByAppId(appId, priceInfo, gameTitle);
 				}
 				const resultElem = document.getElementById(`${btnId}_after`);
@@ -537,6 +539,17 @@
 			});
 	}
 
+	// Get all cheapest official & keyshop entries with a Steam DRM, then extract the price from the descendant span. Also include currency information! (Note: should we separate official from keyshop prices?)
+	function getPricesFromDOM(doc)
+	{
+		let ld = JSON.parse(doc.querySelector('script[type="application/ld+json"]').innerText), price, prices;
+		prices = doc.querySelectorAll(':is(#official-stores, #keyshops) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
+		price = Array.from(prices).map(el => el.textContent.replace(/~/g, '').trim()).join('|'); // Remove ~ (we know it's an approximation!) and spaces.
+		if (/[\d,.$€|]+/.test(price))
+			return (ld.offers.priceCurrency || 'USD') + '|' + price;
+		return PRICE_ERROR;
+	}
+
 	// -------------------------------------------------------------------------
 	// Fetch logic (always fresh on manual click)
 	// -------------------------------------------------------------------------
@@ -549,9 +562,10 @@
 				onload: (response) => {
 					const parser = new DOMParser();
 					const doc = parser.parseFromString(response.responseText, "text/html");
+
 					let priceElem = doc.querySelector(".market_commodity_orders_header_promote");
-					let price = priceElem ? priceElem.textContent.trim() : "No price found";
-					if (price === "No price found") {
+					let price = priceElem ? priceElem.textContent.trim() : PRICE_ERROR;
+					if (price === PRICE_ERROR) {
 						const alternativeElem = doc.querySelector(".market_listing_price");
 						if (alternativeElem) {
 							price = alternativeElem.textContent.trim();
@@ -559,8 +573,8 @@
 					}
 					callback(price, gameName, null);
 				},
-				onerror: () => callback("No price found", gameName, null),
-				ontimeout: () => callback("No price found", gameName, null)
+				onerror: () => callback(PRICE_ERROR, gameName, null),
+				ontimeout: () => callback(PRICE_ERROR, gameName, null)
 			});
 			return;
 		} else if (gameName === "Mann Co. Supply Crate Key") {
@@ -571,12 +585,13 @@
 				onload: (response) => {
 					const parser = new DOMParser();
 					const doc = parser.parseFromString(response.responseText, "text/html");
+
 					let priceElem = doc.querySelector(".ecurrency");
-					let price = priceElem ? priceElem.textContent.trim() : "No price found";
+					let price = priceElem ? priceElem.textContent.trim() : PRICE_ERROR;
 					callback(price, gameName, null);
 				},
-				onerror: () => callback("No price found", gameName, null),
-				ontimeout: () => callback("No price found", gameName, null)
+				onerror: () => callback(PRICE_ERROR, gameName, null),
+				ontimeout: () => callback(PRICE_ERROR, gameName, null)
 			});
 			return;
 		}
@@ -588,18 +603,8 @@
 			onload: (response) => {
 				const parser = new DOMParser();
 				const doc = parser.parseFromString(response.responseText, "text/html");
-				let priceElems = doc.querySelectorAll(".price-inner.numeric");
-				let prices = Array.from(priceElems).map(el => el.textContent.trim());
-				let price;
-				if (prices.length === 0) {
-					price = "No price found";
-				} else if (prices.length === 1 && /^~? ?\$\d+/.test(prices[0])) {
-					price = prices[0];
-				} else if (/^~? ?\$\d+/.test(prices[0]) && /^~? ?\$\d+/.test(prices[1])) {
-					let officialPrice = prices[0];
-					let keyshopPrice = prices[1];
-					price = `${officialPrice} | ${keyshopPrice}`;
-				}
+
+				let price = getPricesFromDOM(doc);
 
 				let foundName = null;
 				let foundAppId = null;
@@ -617,8 +622,8 @@
 				}
 				callback(price, foundName || gameName, foundAppId);
 			},
-			onerror: () => callback("No price found", gameName, null),
-			ontimeout: () => callback("No price found", gameName, null)
+			onerror: () => callback(PRICE_ERROR, gameName, null),
+			ontimeout: () => callback(PRICE_ERROR, gameName, null)
 		});
 	}
 
@@ -630,27 +635,16 @@
 			onload: (response) => {
 				const parser = new DOMParser();
 				const doc = parser.parseFromString(response.responseText, "text/html");
-				let priceElems = doc.querySelectorAll(".price-inner.numeric");
-				let prices = Array.from(priceElems).map(el => el.textContent.trim());
-				let price;
 
-				if (prices.length === 0) {
-					price = "No price found";
-				} else if (prices.length === 1 && /^~? ?\$\d+/.test(prices[0])) {
-					price = prices[0];
-				} else if (/^~? ?\$\d+/.test(prices[0]) && /^~? ?\$\d+/.test(prices[1])) {
-					let officialPrice = prices[0];
-					let keyshopPrice = prices[1];
-					price = `${officialPrice} | ${keyshopPrice}`;
-				}
+				let price = getPricesFromDOM(doc);
 
 				let nameElem = doc.querySelector('a[itemprop="item"].active span[itemprop="name"]');
 				let gameTitle = nameElem ? nameElem.textContent.trim() : null;
 
 				callback(price, gameTitle);
 			},
-			onerror: () => callback("No price found", null),
-			ontimeout: () => callback("No price found", null)
+			onerror: () => callback(PRICE_ERROR, null),
+			ontimeout: () => callback(PRICE_ERROR, null)
 		});
 	}
 
