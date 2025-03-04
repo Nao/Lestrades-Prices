@@ -1,22 +1,22 @@
 // ==UserScript==
-// @name		 Lestrade's Prices
+// @name	Lestrade's Prices
 // @namespace	https://lestrades.com
-// @version	  0.62
+// @version	0.62
 // @description  Integrates GG.Deals prices on Lestrades.com with caching, rate limiting, special-item handling, and one-click price lookups.
-// @match		https://lestrades.com/*
-// @connect	  gg.deals
-// @connect	  steamcommunity.com
-// @connect	  mannco.store
-// @grant		GM_xmlhttpRequest
-// @grant		GM_setValue
-// @grant		GM_getValue
-// @grant		GM_registerMenuCommand
-// @grant		GM_addStyle
-// @run-at	   document-end
-// @homepageURL  https://github.com/Nao/Lestrades-Prices/
-// @supportURL   https://github.com/Nao/Lestrades-Prices/issues
-// @downloadURL  https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
-// @updateURL    https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
+// @match	https://lestrades.com/*
+// @connect	gg.deals
+// @connect	steamcommunity.com
+// @connect	mannco.store
+// @grant	GM_xmlhttpRequest
+// @grant	GM_setValue
+// @grant	GM_getValue
+// @grant	GM_registerMenuCommand
+// @grant	GM_addStyle
+// @run-at	document-end
+// @homepageURL	https://github.com/Nao/Lestrades-Prices/
+// @supportURL	https://github.com/Nao/Lestrades-Prices/issues
+// @downloadURL	https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
+// @updateURL	https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
 // ==/UserScript==
 
 // Original author: MrAwesomeFalcon
