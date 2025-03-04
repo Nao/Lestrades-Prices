@@ -15,8 +15,8 @@
 // @run-at	   document-end
 // @homepageURL  https://github.com/Nao/Lestrades-Prices/
 // @supportURL   https://github.com/Nao/Lestrades-Prices/issues
-// @downloadURL  https://github.com/Nao/Lestrades-Prices/blob/main/Lestrades-Prices.user.js
-// @updateURL    https://github.com/Nao/Lestrades-Prices/blob/main/Lestrades-Prices.user.js
+// @downloadURL  https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
+// @updateURL    https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
 // ==/UserScript==
 
 // Original author: MrAwesomeFalcon
@@ -91,6 +91,7 @@
 	}
 
 	function execRequest() {
+        console.log(requestQueue);
 		if (requestQueue.length)
 			GM_xmlhttpRequest(requestQueue.shift());
 	}
@@ -151,7 +152,7 @@
 				} else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
 					freshApps.push({ btnId, appId: appIdFromLink });
 				}
-			} else {
+            } else {
 				// Name-based item
 				allItems.push({ gameName, btnId });
 
@@ -183,6 +184,8 @@
 				}
 			}
 		});
+        if (document.querySelector('#gg-priority'))
+            document.querySelector('#gg-priority + span > a').click();
 	}
 
 	// -------------------------------------------------------------------------
@@ -547,11 +550,11 @@
 	// Get all cheapest official & keyshop entries with a Steam DRM, then extract the price from the descendant span. Also include currency information! (Note: should we separate official from keyshop prices?)
 	function getPricesFromDOM(doc)
 	{
-		let ld = JSON.parse(doc.querySelector('script[type="application/ld+json"]').innerText), price, prices;
+		let price, prices, ld = doc.querySelector('script[type="application/ld+json"]');
 		prices = doc.querySelectorAll(':is(#official-stores, #keyshops) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
 		price = Array.from(prices).map(el => el.textContent.replace(/~/g, '').trim()).join('|'); // Remove ~ (we know it's an approximation!) and spaces.
-		if (/[\d,.$€|]+/.test(price))
-			return (ld.offers.priceCurrency || 'USD') + '|' + price;
+		if (/[\d,.$€|]+/.test(price)) // If ld didn't return, we may have an empty game page.
+			return (JSON.parse(ld?.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
 		return PRICE_ERROR;
 	}
 
