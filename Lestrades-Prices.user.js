@@ -144,7 +144,8 @@
 				const cached = cachedPrices[appIdFromLink];
 				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
 					const resultElem = document.getElementById(`${btnId}_after`);
-					resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
+					let show = cached.price.split('|');
+					resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
 				} else if (!cached) {
 					freshApps.push({ btnId, appId: appIdFromLink });
 				} else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
@@ -164,7 +165,8 @@
 						const resultElem = document.getElementById(`${btnId}_after`);
 						if (resultElem) {
 							const linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
-							resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
+							let show = priceInfo.split('|');
+							resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
 						}
 					});
 				});
@@ -172,7 +174,8 @@
 				const cached = cachedPrices[gameName];
 				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || gameName, cached.timestamp)) {
 					const resultElem = document.getElementById(`${btnId}_after`);
-					resultElem.innerHTML = ` (<a href="${getItemURL(gameName)}" target="_blank" style="text-decoration:none;">${cached.price}</a>)`;
+					let show = cached.price.split('|'); // Only show the (normally) lowest price; skip currency.
+					resultElem.innerHTML = ` (<a href="${getItemURL(gameName)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
 				} else if (!cached) {
 					freshGames.push({ btnId, gameName });
 				} else if (cached && !isCacheFresh(cached.name || gameName, cached.timestamp)) {
@@ -461,7 +464,8 @@
 				const resultElem = document.getElementById(`${btnId}_after`);
 				if (resultElem) {
 					const linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
-					resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
+					let show = priceInfo.split('|');
+					resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
 				}
 			});
 		});
@@ -475,7 +479,8 @@
 				}
 				const resultElem = document.getElementById(`${btnId}_after`);
 				if (resultElem) {
-					resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${priceInfo}</a>)`;
+					let show = priceInfo.split('|');
+					resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
 				}
 			});
 		});
@@ -703,5 +708,4 @@
 		}
 		return `${ageInDays.toFixed(2)} days`;
 	}
-
 })();
