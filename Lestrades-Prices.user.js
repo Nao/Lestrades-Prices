@@ -1,18 +1,18 @@
 // ==UserScript==
-// @name		Lestrade's Prices
+// @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version		0.63
+// @version			0.64
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting, special-item handling, and one-click price lookups.
-// @match		https://lestrades.com/*
-// @connect		gg.deals
-// @connect		steamcommunity.com
-// @connect		mannco.store
-// @grant		GM_xmlhttpRequest
-// @grant		GM_setValue
-// @grant		GM_getValue
-// @grant		GM_registerMenuCommand
-// @grant		GM_addStyle
-// @run-at		document-end
+// @match			https://lestrades.com/*
+// @connect			gg.deals
+// @connect			steamcommunity.com
+// @connect			mannco.store
+// @grant			GM_xmlhttpRequest
+// @grant			GM_setValue
+// @grant			GM_getValue
+// @grant			GM_registerMenuCommand
+// @grant			GM_addStyle
+// @run-at			document-end
 // @homepageURL		https://github.com/Nao/Lestrades-Prices/
 // @supportURL		https://github.com/Nao/Lestrades-Prices/issues
 // @downloadURL		https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
@@ -57,7 +57,7 @@
 			line-height: 1 !important;
 		}
 		.ggdeals-price-container small {
-		    position: relative;
+			position: relative;
 			top: -3px;
 		}
 	`);
@@ -151,7 +151,7 @@
 				} else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
 					freshApps.push({ btnId, appId: appIdFromLink });
 				}
-            } else {
+			} else {
 				// Name-based item
 				allItems.push({ gameName, btnId });
 
@@ -183,8 +183,8 @@
 				}
 			}
 		});
-        if (document.querySelector('#gg-priority'))
-            document.querySelector('#gg-priority + span > a').click();
+		if (document.querySelector('#gg-priority'))
+			document.querySelector('#gg-priority + span > a').click();
 	}
 
 	// -------------------------------------------------------------------------
@@ -551,7 +551,7 @@
 	{
 		let price, prices, ld = doc.querySelector('script[type="application/ld+json"]');
 		prices = doc.querySelectorAll(':is(#official-stores, #keyshops) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
-		price = Array.from(prices).map(el => el.textContent.replace(/~/g, '').trim()).join('|'); // Remove ~ (we know it's an approximation!) and spaces.
+		price = Array.from(prices).map(el => el.textContent.replace(/~/g, '').replace(/(?<=\d) (?=\d)/g, '').trim()).join('|'); // Remove ~ (we know it's an approximation!) and spaces.
 		if (/[\d,.$€|]+/.test(price) || ld === null)
 			return (ld === null ? 'LTS' : JSON.parse(ld.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
 		return PRICE_ERROR;
