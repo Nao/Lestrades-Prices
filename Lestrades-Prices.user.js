@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name		Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version		0.62
+// @version		0.63
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting, special-item handling, and one-click price lookups.
 // @match		https://lestrades.com/*
 // @connect		gg.deals
