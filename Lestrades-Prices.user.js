@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.64
+// @version			0.68
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting, special-item handling, and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -33,7 +33,8 @@
 	const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
 	const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon
-	const PRICE_ERROR = 'No price found';
+	const PRICE_EMPTY = 'No LD';
+	const PRICE_ERROR = 'Error';
 	// https://imgur.com/a/dTvpB2K Album of custom icons I made
 
 	// Special items settings
@@ -97,6 +98,13 @@
 
 	function queueGMRequest(req) { requestQueue.push(req); }
 
+	function link_me(btnId, link, text)
+	{
+        const btn = document.getElementById(btnId + '_after');
+        if (btn !== null)
+            btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + text + '</a>)';
+	}
+
 	// -------------------------------------------------------------------------
 	// 1) Scanning for app IDs across Lestrade's
 	// -------------------------------------------------------------------------
@@ -129,23 +137,16 @@
 				const btnElem = document.getElementById(btnId);
 				btnElem.addEventListener('click', () => {
 					fetchItemPriceByAppId(appIdFromLink, (priceInfo, gameTitle) => {
-						if (priceInfo !== PRICE_ERROR) {
-							storeInCacheByAppId(appIdFromLink, priceInfo, gameTitle);
-						}
-						const resultElem = document.getElementById(`${btnId}_after`);
-						if (resultElem) {
-							let show = priceInfo.split('|'); // Only show the (normally) lowest price; skip currency.
-							resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
-						}
+						storeInCacheByAppId(appIdFromLink, priceInfo, gameTitle);
+						link_me(btnId, getItemURLByAppId(appIdFromLink), priceInfo);
 					});
+					window.unsafeWindow._ignor_clic = true;
 				});
 
 				// Show cached if fresh or mark as needed
 				const cached = cachedPrices[appIdFromLink];
 				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
-					const resultElem = document.getElementById(`${btnId}_after`);
-					let show = cached.price.split('|');
-					resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appIdFromLink)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
+					link_me(btnId, getItemURLByAppId(appIdFromLink), cached.price);
 				} else if (!cached) {
 					freshApps.push({ btnId, appId: appIdFromLink });
 				} else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
@@ -159,23 +160,15 @@
 				const btnElem = document.getElementById(btnId);
 				btnElem.addEventListener('click', () => {
 					fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
-						if (priceInfo !== PRICE_ERROR) {
-							storeInCache(gameName, priceInfo, foundName, foundAppId);
-						}
-						const resultElem = document.getElementById(`${btnId}_after`);
-						if (resultElem) {
-							const linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
-							let show = priceInfo.split('|');
-							resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
-						}
+						storeInCache(gameName, priceInfo, foundName, foundAppId);
+						link_me(btnId, foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName), priceInfo);
 					});
+					window.unsafeWindow._ignor_clic = true;
 				});
 
 				const cached = cachedPrices[gameName];
 				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || gameName, cached.timestamp)) {
-					const resultElem = document.getElementById(`${btnId}_after`);
-					let show = cached.price.split('|'); // Only show the (normally) lowest price; skip currency.
-					resultElem.innerHTML = ` (<a href="${getItemURL(gameName)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
+					link_me(btnId, getItemURL(gameName), cached.price);
 				} else if (!cached) {
 					freshGames.push({ btnId, gameName });
 				} else if (cached && !isCacheFresh(cached.name || gameName, cached.timestamp)) {
@@ -183,8 +176,10 @@
 				}
 			}
 		});
-		if (document.querySelector('#gg-priority'))
+		if (document.querySelector('#gg-priority')) {
 			document.querySelector('#gg-priority + span > a').click();
+			window.unsafeWindow._ignor_clic = false;
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -460,15 +455,8 @@
 		allItems.forEach(item => {
 			const { gameName, btnId } = item;
 			fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
-				if (priceInfo !== PRICE_ERROR) {
-					storeInCache(gameName, priceInfo, foundName, foundAppId);
-				}
-				const resultElem = document.getElementById(`${btnId}_after`);
-				if (resultElem) {
-					const linkUrl = foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName);
-					let show = priceInfo.split('|');
-					resultElem.innerHTML = ` (<a href="${linkUrl}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
-				}
+				storeInCache(gameName, priceInfo, foundName, foundAppId);
+				link_me(btnId, foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName), priceInfo);
 			});
 		});
 
@@ -476,14 +464,8 @@
 		appItems.forEach(item => {
 			const { appId, btnId } = item;
 			fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
-				if (priceInfo !== PRICE_ERROR) {
-					storeInCacheByAppId(appId, priceInfo, gameTitle);
-				}
-				const resultElem = document.getElementById(`${btnId}_after`);
-				if (resultElem) {
-					let show = priceInfo.split('|');
-					resultElem.innerHTML = ` (<a href="${getItemURLByAppId(appId)}" target="_blank" style="text-decoration:none;">${show[1]}</a>)`;
-				}
+				storeInCacheByAppId(appId, priceInfo, gameTitle);
+				link_me(btnId, getItemURLByAppId(appId), priceInfo);
 			});
 		});
 	}
@@ -511,7 +493,6 @@
 					data: 'gg=' + encodeURI(priceInfo) + '&app=' + foundAppId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
 					headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 				});
-
 		} else {
 			// No appid
 			cachedPrices[gameName] = {
@@ -549,11 +530,12 @@
 	// Get all cheapest official & keyshop entries with a Steam DRM, then extract the price from the descendant span. Also include currency information! (Note: should we separate official from keyshop prices?)
 	function getPricesFromDOM(doc)
 	{
-		let price, prices, ld = doc.querySelector('script[type="application/ld+json"]');
-		prices = doc.querySelectorAll(':is(#official-stores, #keyshops) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
-		price = Array.from(prices).map(el => el.textContent.replace(/~/g, '').replace(/(?<=\d) (?=\d)/g, '').trim()).join('|'); // Remove ~ (we know it's an approximation!) and spaces.
-		if (/[\d,.$€|]+/.test(price) || ld === null)
-			return (ld === null ? 'LTS' : JSON.parse(ld.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
+		const ld = doc.querySelector('script[type="application/ld+json"]');
+		if (ld === null) return PRICE_NOLD;
+		const prices = doc.querySelectorAll(':is(#keyshops, #official-stores) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
+		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
+		const price = Math.min(...Array.from(prices).map(el => el.textContent.replace(/[^\d]/g, '')));
+		if (/\d+/.test(price)) return (JSON.parse(ld.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
 		return PRICE_ERROR;
 	}
 
@@ -605,24 +587,24 @@
 
 		const url = `https://gg.deals/search/?platform=1,2,4,2048,4096,8192&title=${encodeURIComponent(gameName)}`;
 		queueGMRequest({
-			method: "GET",
+			method: 'GET',
 			url: url,
 			onload: (response) => {
 				const parser = new DOMParser();
-				const doc = parser.parseFromString(response.responseText, "text/html");
+				const doc = parser.parseFromString(response.responseText, 'text/html');
 
 				let price = getPricesFromDOM(doc);
 
 				let foundName = null;
 				let foundAppId = null;
-				const firstResultLink = doc.querySelector(".game-info-title[href*='/steam/app/']");
+				const firstResultLink = doc.querySelector('.game-info-title[href*="/steam/app/"]');
 				if (firstResultLink) {
 					const href = firstResultLink.getAttribute('href');
 					const appIdMatch = href.match(/\/steam\/((?:app|sub)\/\d+)\//);
 					if (appIdMatch) {
 						foundAppId = appIdMatch[1];
 					}
-					const nameElem = firstResultLink.querySelector("[itemprop='name']");
+					const nameElem = firstResultLink.querySelector('[itemprop="name"]');
 					if (nameElem) {
 						foundName = nameElem.textContent.trim();
 					}
@@ -641,7 +623,7 @@
 			url: url,
 			onload: (response) => {
 				const parser = new DOMParser();
-				const doc = parser.parseFromString(response.responseText, "text/html");
+				const doc = parser.parseFromString(response.responseText, 'text/html');
 
 				let price = getPricesFromDOM(doc);
 
