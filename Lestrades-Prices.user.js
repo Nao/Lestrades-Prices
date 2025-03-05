@@ -33,7 +33,7 @@
 	const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
 	const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon
-	const PRICE_EMPTY = 'No LD';
+	const PRICE_NOLD = 'No LD';
 	const PRICE_ERROR = 'Error';
 	// https://imgur.com/a/dTvpB2K Album of custom icons I made
 
