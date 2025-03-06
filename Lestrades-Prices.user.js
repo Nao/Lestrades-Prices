@@ -99,9 +99,9 @@
 
 	function link_me(btnId, link, text)
 	{
-        const btn = document.getElementById(btnId + '_after');
-        if (btn !== null)
-            btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + (text.indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
+		const btn = document.getElementById(btnId + '_after');
+		if (btn !== null)
+			btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + (text.indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
 	}
 
 	// -------------------------------------------------------------------------
