@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.68
+// @version			0.69
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting, special-item handling, and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -32,10 +32,9 @@
 	const ITEMS_PER_PAGE = 50; // items per page in the cache view
 	const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
-	const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon
+	const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon. https://imgur.com/a/dTvpB2K for more icons made by Falc
 	const PRICE_NOLD = 'No LD';
 	const PRICE_ERROR = 'Error';
-	// https://imgur.com/a/dTvpB2K Album of custom icons I made
 
 	// Special items settings
 	const SPECIAL_CACHE_DURATION = 24 * 60 * 60 * 1000;
@@ -100,9 +99,9 @@
 
 	function link_me(btnId, link, text)
 	{
-		const btn = document.getElementById(btnId + '_after');
-		if (btn !== null)
-			btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + (text.indexOf('|') ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
+        const btn = document.getElementById(btnId + '_after');
+        if (btn !== null)
+            btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + (text.indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
 	}
 
 	// -------------------------------------------------------------------------
@@ -176,10 +175,14 @@
 				}
 			}
 		});
-		if (document.querySelector('#gg-priority')) {
-			document.querySelector('#gg-priority + span > a').click();
-			window.unsafeWindow._ignor_clic = false;
-		}
+
+		// Auto-click the single priority entry on any page -- but only after 5 seconds, to avoid overloading the server.
+		setTimeout(() => {
+			if (document.querySelector('#gg-priority')) {
+				document.querySelector('#gg-priority + span > a').click();
+				window.unsafeWindow._ignor_clic = false;
+			}
+		}, 5000);
 	}
 
 	// -------------------------------------------------------------------------
