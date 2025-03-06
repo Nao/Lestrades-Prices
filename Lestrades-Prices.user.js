@@ -1,12 +1,10 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.69
-// @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting, special-item handling, and one-click price lookups.
+// @version			0.75
+// @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
-// @connect			steamcommunity.com
-// @connect			mannco.store
 // @grant			GM_xmlhttpRequest
 // @grant			GM_setValue
 // @grant			GM_getValue
@@ -14,7 +12,7 @@
 // @grant			GM_addStyle
 // @run-at			document-end
 // @homepageURL		https://github.com/Nao/Lestrades-Prices/
-// @supportURL		https://github.com/Nao/Lestrades-Prices/issues
+// @supportURL		https://lestrades.com/general/358/script-help-retrieve-gg-deals-prices/
 // @downloadURL		https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
 // @updateURL		https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
 // ==/UserScript==
@@ -36,12 +34,8 @@
 	const PRICE_NOLD = 'No LD';
 	const PRICE_ERROR = 'Error';
 
-	// Special items settings
-	const SPECIAL_CACHE_DURATION = 24 * 60 * 60 * 1000;
-	const SPECIAL_ITEMS = ["Gems", "Sack of Gems", "Mann Co. Supply Crate Key"];
-
-	// REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/6 seconds)
-	const REQUEST_INTERVAL_MS = 6000; // 6 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
+	// REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/7 seconds + potential gg-priority fetch)
+	const REQUEST_INTERVAL_MS = 7000; // 7 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
 	let requestQueue = [];
 	setTimeout(execRequest, 1000); // Do it a first time once we have a chance to fill in that queue.
 	setInterval(execRequest, REQUEST_INTERVAL_MS);
@@ -74,10 +68,7 @@
 	GM_registerMenuCommand("Soft load (only missing)", softLoad);
 	GM_registerMenuCommand("Hard load (refresh all)", hardLoad);
 
-	// We'll keep arrays to track name-based items vs. appid-based items
-	let allItems = []; // name-based
-	let freshGames = [];
-	let appItems = []; // appid-based
+	let appItems = [];
 	let freshApps = [];
 
 	window.addEventListener('load', init);
@@ -100,7 +91,7 @@
 	function link_me(btnId, link, text)
 	{
 		const btn = document.getElementById(btnId + '_after');
-		if (btn !== null)
+		if (btn)
 			btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + (text.indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
 	}
 
@@ -110,9 +101,9 @@
 	function scanLestrades() {
 		const gameLinks = document.querySelectorAll("a[data-appid], a[data-subid]");
 		gameLinks.forEach((link) => {
-			const gameName = link.textContent.trim();
-			const appIdFromLink = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
+			const appId = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
 			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
+			const gameName = link.innerText || document.title;
 			link.removeAttribute('data-appid');
 			link.removeAttribute('data-subid');
 
@@ -128,51 +119,23 @@
 			`;
 			link.insertAdjacentElement('afterend', container);
 
-			if (appIdFromLink && !isNaN(appIdFromLink.substr(4))) {
-				// AppID-based item
-				appItems.push({ appId: appIdFromLink, btnId });
+			appItems.push({ appId, btnId, gameName });
 
-				// Always refetch on click
-				const btnElem = document.getElementById(btnId);
-				btnElem.addEventListener('click', () => {
-					fetchItemPriceByAppId(appIdFromLink, (priceInfo, gameTitle) => {
-						storeInCacheByAppId(appIdFromLink, priceInfo, gameTitle);
-						link_me(btnId, getItemURLByAppId(appIdFromLink), priceInfo);
-					});
-					window.unsafeWindow._ignor_clic = true;
-				});
+			// Always refetch on click
+			const btnElem = document.getElementById(btnId);
+			btnElem.addEventListener('click', () => {
+				fetchItemPrice(appId, btnId, gameName);
+				window.unsafeWindow._ignor_clic = true;
+			});
 
-				// Show cached if fresh or mark as needed
-				const cached = cachedPrices[appIdFromLink];
-				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
-					link_me(btnId, getItemURLByAppId(appIdFromLink), cached.price);
-				} else if (!cached) {
-					freshApps.push({ btnId, appId: appIdFromLink });
-				} else if (!isCacheFresh(cached.name || appIdFromLink, cached.timestamp)) {
-					freshApps.push({ btnId, appId: appIdFromLink });
-				}
-			} else {
-				// Name-based item
-				allItems.push({ gameName, btnId });
-
-				// Always refetch on click
-				const btnElem = document.getElementById(btnId);
-				btnElem.addEventListener('click', () => {
-					fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
-						storeInCache(gameName, priceInfo, foundName, foundAppId);
-						link_me(btnId, foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName), priceInfo);
-					});
-					window.unsafeWindow._ignor_clic = true;
-				});
-
-				const cached = cachedPrices[gameName];
-				if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.name || gameName, cached.timestamp)) {
-					link_me(btnId, getItemURL(gameName), cached.price);
-				} else if (!cached) {
-					freshGames.push({ btnId, gameName });
-				} else if (cached && !isCacheFresh(cached.name || gameName, cached.timestamp)) {
-					freshGames.push({ btnId, gameName });
-				}
+			// Show cached if fresh or mark as needed
+			const cached = cachedPrices[appId];
+			if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.timestamp)) {
+				link_me(btnId, gg_URL(appId), cached.price);
+			} else if (!cached) {
+				freshApps.push({ btnId, appId: appId });
+			} else if (!isCacheFresh(cached.timestamp)) {
+				freshApps.push({ btnId, appId: appId });
 			}
 		});
 
@@ -189,18 +152,7 @@
 	// 2) Auto-load logic
 	// -------------------------------------------------------------------------
 	function maybeAutoLoadFresh() {
-		// Autoload fresh name-based items
-		if (AUTO_CHECK_COUNT > 0 && freshGames.length > 0) {
-			const limit = Math.min(AUTO_CHECK_COUNT, freshGames.length);
-			for (let i = 0; i < limit; i++) {
-				setTimeout(() => {
-					const elem = document.getElementById(freshGames[i].btnId);
-					if (elem) elem.click();
-				}, 500 * i);
-			}
-		}
-
-		// Autoload fresh app-based items
+		// Autoload fresh items
 		if (AUTO_CHECK_COUNT > 0 && freshApps.length > 0) {
 			const limit = Math.min(AUTO_CHECK_COUNT, freshApps.length);
 			for (let i = 0; i < limit; i++) {
@@ -218,18 +170,12 @@
 	function viewCachedPrices() {
 		const now = Date.now();
 		const allEntries = Object.entries(cachedPrices).map(([key, data]) => {
-			const ageMs = now - data.timestamp;
-			const ageStr = formatAge(ageMs);
-			const isAppId = !isNaN(key.substr(4));
-			let usedName = data.name || key;
-			const url = data.appid ? getItemURLByAppId(data.appid) : getItemURL(usedName);
-
 			return {
-				gameName: usedName,
+				gameName: data.name || key,
 				price: data.price,
-				ageStr,
-				url,
-				appid: data.appid || (isAppId ? key : null)
+				ageStr: formatAge(now - data.timestamp),
+				url: gg_URL(data.appid),
+				appid: data.appid || key
 			};
 		});
 
@@ -285,14 +231,12 @@
 		searchButton.style.marginRight = '5px';
 
 		const clearButton = document.createElement('button');
-		clearButton.textContent = 'Clear';
+		clearButton.textContent = 'Reset';
 
 		searchButton.addEventListener('click', () => {
 			const query = searchInput.value.trim().toLowerCase();
 			if (query) {
-				filteredEntries = allEntries.filter(e =>
-					e.gameName.toLowerCase().includes(query) ||
-					(e.appid && e.appid.toString().includes(query))
+				filteredEntries = allEntries.filter(e => e.gameName.toLowerCase().includes(query) || (e.appid && e.appid.toString().includes(query))
 				);
 			} else {
 				filteredEntries = [...allEntries];
@@ -364,14 +308,12 @@
 			const start = currentPage * ITEMS_PER_PAGE;
 			const end = start + ITEMS_PER_PAGE;
 			const pageItems = filteredEntries.slice(start, end);
-			if (pageItems.length === 0) {
+			if (!pageItems.length) {
 				resultsDiv.innerHTML = 'No results.';
 				return;
 			}
 
-			const lines = pageItems.map(e =>
-				formatLine(e.gameName, e.price, e.ageStr, e.url, e.appid)
-			);
+			const lines = pageItems.map(e => formatLine(e.gameName, e.price, e.ageStr, e.url, e.appid));
 			resultsDiv.innerHTML = `<pre>${lines.join('\n')}</pre>`;
 		}
 
@@ -379,74 +321,30 @@
 	}
 
 	function formatLine(gameName, price, ageStr, url, appid) {
-		let displayPrice = price;
-		const nameLower = gameName.toLowerCase();
-		if ((nameLower.includes("gems") || nameLower.includes("sack of gems")) && displayPrice.startsWith('$')) {
-			displayPrice += "/1000";
-		}
-
 		let fullName = padRight(gameName, GAME_NAME_WIDTH);
 		// Reserve space for AppID block: 9 chars "[1230530]" or "[	   ]"
-		if (appid) {
-			fullName += ` [${appid}]`;
-		} else {
-			fullName += ` [	   ]`;
-		}
+		fullName += appid ? ` [${appid}]` : ` [	   ]`;
 
-		return `${fullName} ${displayPrice} (Age: ${ageStr}) ${urlLink("GG Deals", url)}`;
-	}
-
-	function urlLink(text, url) {
-		return `<a href="${url}" target="_blank">${text}</a>`;
+		return `${fullName} ${price} (Age: ${ageStr}) <a href="${url}" target="_blank">GG Deals</a>`;
 	}
 
 	function padRight(str, length) {
-		if (str.length < length) {
-			return str + ' '.repeat(length - str.length);
-		}
-		return str;
+		return (str.length < length) ? str + ' '.repeat(length - str.length) : str;
 	}
 
 	function clearCachedPrices() {
-		if (confirm("Are you sure you want to clear all cached prices?")) {
+		if (confirm('Are you sure you want to clear the price cache?')) {
 			cachedPrices = {};
-			GM_setValue("cachedPrices", cachedPrices);
-			alert("Cached prices cleared.");
+			GM_setValue('cachedPrices', cachedPrices);
+			alert('Price cache cleared.');
 		}
 	}
 
 	function softLoad() {
-		// For name-based items
-		allItems.forEach(item => {
-			const { gameName, btnId } = item;
-			const cached = cachedPrices[gameName];
-			let shouldLoad = false;
-			if (!SHOW_CACHED_IMMEDIATELY) {
-				shouldLoad = true;
-			} else {
-				if (!cached || !isCacheFresh(cached.name || gameName, cached.timestamp) || cached.price === PRICE_ERROR) {
-					shouldLoad = true;
-				}
-			}
-			if (shouldLoad) {
-				const elem = document.getElementById(btnId);
-				if (elem) elem.click();
-			}
-		});
-
-		// For appId items
 		appItems.forEach(item => {
 			const { appId, btnId } = item;
 			const cached = cachedPrices[appId];
-			let shouldLoad = false;
-			if (!SHOW_CACHED_IMMEDIATELY) {
-				shouldLoad = true;
-			} else {
-				if (!cached || !isCacheFresh(cached.name || appId, cached.timestamp) || cached.price === PRICE_ERROR) {
-					shouldLoad = true;
-				}
-			}
-			if (shouldLoad) {
+			if (!SHOW_CACHED_IMMEDIATELY || !cached || !isCacheFresh(cached.timestamp) || cached.price === PRICE_ERROR) {
 				const elem = document.getElementById(btnId);
 				if (elem) elem.click();
 			}
@@ -454,66 +352,16 @@
 	}
 
 	function hardLoad() {
-		// For name-based items
-		allItems.forEach(item => {
-			const { gameName, btnId } = item;
-			fetchItemPriceByName(gameName, (priceInfo, foundName, foundAppId) => {
-				storeInCache(gameName, priceInfo, foundName, foundAppId);
-				link_me(btnId, foundAppId ? getItemURLByAppId(foundAppId) : getItemURL(foundName || gameName), priceInfo);
-			});
-		});
-
-		// For appId items
 		appItems.forEach(item => {
-			const { appId, btnId } = item;
-			fetchItemPriceByAppId(appId, (priceInfo, gameTitle) => {
-				storeInCacheByAppId(appId, priceInfo, gameTitle);
-				link_me(btnId, getItemURLByAppId(appId), priceInfo);
-			});
+			const { appId, btnId, gameName } = item;
+			fetchItemPrice(appId, btnId, gameName);
 		});
 	}
 
 	// -------------------------------------------------------------------------
 	// Storing in cache
 	// -------------------------------------------------------------------------
-	function storeInCache(gameName, priceInfo, foundName, foundAppId) {
-		if (foundAppId) {
-			// If we used to store by gameName, remove that entry
-			if (cachedPrices[gameName] && cachedPrices[gameName].appid !== foundAppId) {
-				delete cachedPrices[gameName];
-			}
-			// Store by appId only
-			cachedPrices[foundAppId] = {
-				price: priceInfo,
-				name: foundName || gameName,
-				appid: foundAppId,
-				timestamp: Date.now()
-			};
-			if (document.querySelector('#wedge') && foundAppId)
-				GM_xmlhttpRequest({
-					method: 'POST',
-					url: 'https://lestrades.com/?action=ajax;sa=gg',
-					data: 'gg=' + encodeURI(priceInfo) + '&app=' + foundAppId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
-					headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-				});
-		} else {
-			// No appid
-			cachedPrices[gameName] = {
-				price: priceInfo,
-				name: foundName || gameName,
-				timestamp: Date.now()
-			};
-		}
-		GM_setValue("cachedPrices", cachedPrices);
-	}
-
-	function storeInCacheByAppId(appId, priceInfo, gameTitle) {
-		// If previously stored by name, remove that entry
-		for (const [key, val] of Object.entries(cachedPrices)) {
-			if (key !== appId && val.appid === appId) {
-				delete cachedPrices[key];
-			}
-		}
+	function storeInCache(appId, priceInfo, gameTitle) {
 		cachedPrices[appId] = {
 			price: priceInfo,
 			name: gameTitle || appId,
@@ -530,11 +378,11 @@
 			});
 	}
 
-	// Get all cheapest official & keyshop entries with a Steam DRM, then extract the price from the descendant span. Also include currency information! (Note: should we separate official from keyshop prices?)
+	// Get currency + lowest price among all official & keyshop entries with a Steam DRM.
 	function getPricesFromDOM(doc)
 	{
 		const ld = doc.querySelector('script[type="application/ld+json"]');
-		if (ld === null) return PRICE_NOLD;
+		if (!ld) return PRICE_NOLD; // Likely no prices available!
 		const prices = doc.querySelectorAll(':is(#keyshops, #official-stores) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
 		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
 		const price = Math.min(...Array.from(prices).map(el => el.textContent.replace(/[^\d]/g, '')));
@@ -545,95 +393,28 @@
 	// -------------------------------------------------------------------------
 	// Fetch logic (always fresh on manual click)
 	// -------------------------------------------------------------------------
-	function fetchItemPriceByName(gameName, callback) {
-		if (gameName === "Gems" || gameName === "Sack of Gems") {
-			const url = `https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems`;
-			GM_xmlhttpRequest({
-				method: "GET",
-				url: url,
-				onload: (response) => {
-					const parser = new DOMParser();
-					const doc = parser.parseFromString(response.responseText, "text/html");
-
-					let priceElem = doc.querySelector(".market_commodity_orders_header_promote");
-					let price = priceElem ? priceElem.textContent.trim() : PRICE_ERROR;
-					if (price === PRICE_ERROR) {
-						const alternativeElem = doc.querySelector(".market_listing_price");
-						if (alternativeElem) {
-							price = alternativeElem.textContent.trim();
-						}
-					}
-					callback(price, gameName, null);
-				},
-				onerror: () => callback(PRICE_ERROR, gameName, null),
-				ontimeout: () => callback(PRICE_ERROR, gameName, null)
-			});
-			return;
-		} else if (gameName === "Mann Co. Supply Crate Key") {
-			const url = `https://mannco.store/item/440-mann-co-supply-crate-key`;
-			GM_xmlhttpRequest({
-				method: "GET",
-				url: url,
-				onload: (response) => {
-					const parser = new DOMParser();
-					const doc = parser.parseFromString(response.responseText, "text/html");
-
-					let priceElem = doc.querySelector(".ecurrency");
-					let price = priceElem ? priceElem.textContent.trim() : PRICE_ERROR;
-					callback(price, gameName, null);
-				},
-				onerror: () => callback(PRICE_ERROR, gameName, null),
-				ontimeout: () => callback(PRICE_ERROR, gameName, null)
-			});
-			return;
-		}
-
-		const url = `https://gg.deals/search/?platform=1,2,4,2048,4096,8192&title=${encodeURIComponent(gameName)}`;
-		queueGMRequest({
-			method: 'GET',
-			url: url,
-			onload: (response) => {
-				const parser = new DOMParser();
-				const doc = parser.parseFromString(response.responseText, 'text/html');
-
-				let price = getPricesFromDOM(doc);
-
-				let foundName = null;
-				let foundAppId = null;
-				const firstResultLink = doc.querySelector('.game-info-title[href*="/steam/app/"]');
-				if (firstResultLink) {
-					const href = firstResultLink.getAttribute('href');
-					const appIdMatch = href.match(/\/steam\/((?:app|sub)\/\d+)\//);
-					if (appIdMatch) {
-						foundAppId = appIdMatch[1];
-					}
-					const nameElem = firstResultLink.querySelector('[itemprop="name"]');
-					if (nameElem) {
-						foundName = nameElem.textContent.trim();
-					}
-				}
-				callback(price, foundName || gameName, foundAppId);
-			},
-			onerror: () => callback(PRICE_ERROR, gameName, null),
-			ontimeout: () => callback(PRICE_ERROR, gameName, null)
-		});
-	}
-
-	function fetchItemPriceByAppId(appId, callback) {
+	function fetchItemPrice(appId, btnId, gameName)
+	{
 		const url = `https://gg.deals/steam/${appId}/`;
 		queueGMRequest({
 			method: "GET",
 			url: url,
 			onload: (response) => {
-				const parser = new DOMParser();
-				const doc = parser.parseFromString(response.responseText, 'text/html');
+				let price, gameTitle;
+				if (response.status >= 400) {
+					price = response.status;
+					gameTitle = gameName || appId;
+				}
+				else {
+					const parser = new DOMParser();
+					const doc = parser.parseFromString(response.responseText, 'text/html');
+					price = getPricesFromDOM(doc);
+					let nameElem = doc.querySelector('a[itemprop="item"].active span[itemprop="name"]');
+					gameTitle = nameElem ? nameElem.textContent.trim() : (gameName || appId);
+				}
 
-				let price = getPricesFromDOM(doc);
-
-				let nameElem = doc.querySelector('a[itemprop="item"].active span[itemprop="name"]');
-				let gameTitle = nameElem ? nameElem.textContent.trim() : null;
-
-				callback(price, gameTitle);
+				storeInCache(appId, price, gameTitle);
+				link_me(btnId, gg_URL(appId), price);
 			},
 			onerror: () => callback(PRICE_ERROR, null),
 			ontimeout: () => callback(PRICE_ERROR, null)
@@ -641,35 +422,21 @@
 	}
 
 	// -------------------------------------------------------------------------
-	// URL helpers
+	// URL helper
 	// -------------------------------------------------------------------------
-	function getItemURL(gameName) {
-		if (gameName === "Gems" || gameName === "Sack of Gems") {
-			return `https://steamcommunity.com/market/listings/753/753-Sack%20of%20Gems`;
-		} else if (gameName === "Mann Co. Supply Crate Key") {
-			return `https://mannco.store/item/440-mann-co-supply-crate-key`;
-		}
-		return `https://gg.deals/search/?platform=1,2,4,2048,4096,8192&title=${encodeURIComponent(gameName)}`;
-	}
-
-	function getItemURLByAppId(appId) {
+	function gg_URL(appId) {
 		return `https://gg.deals/steam/${appId}/`;
 	}
 
 	// -------------------------------------------------------------------------
 	// Freshness / pruning
 	// -------------------------------------------------------------------------
-	function isCacheFresh(gameNameOrId, timestamp) {
-		const nameLower = (gameNameOrId + "").toLowerCase();
-		const now = Date.now();
-		const age = now - timestamp;
-		if (SPECIAL_ITEMS.some(item => item.toLowerCase() === nameLower)) {
-			return age < SPECIAL_CACHE_DURATION;
-		}
-		return age < CACHE_DURATION;
+	function isCacheFresh(timestamp) {
+		return (Date.now() - timestamp) < CACHE_DURATION;
 	}
 
-	function pruneOldEntries() {
+	function pruneOldEntries()
+	{
 		const now = Date.now();
 		let changed = false;
 		for (const [key, data] of Object.entries(cachedPrices)) {
@@ -683,7 +450,8 @@
 		}
 	}
 
-	function formatAge(ms) {
+	function formatAge(ms)
+	{
 		const ageInDays = ms / (1000*60*60*24);
 		const ageInHours = ageInDays * 24;
 		const ageInMinutes = ageInHours * 60;
