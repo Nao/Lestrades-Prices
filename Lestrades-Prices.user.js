@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.75
+// @version			0.76
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -56,17 +56,17 @@
 		}
 	`);
 
-	let cachedPrices = GM_getValue("cachedPrices", {});
+	let cachedPrices = GM_getValue('cachedPrices', {});
 	if (typeof cachedPrices !== 'object' || cachedPrices === null) {
 		cachedPrices = {};
 	}
 
 	pruneOldEntries();
 
-	GM_registerMenuCommand("View Cached Prices", viewCachedPrices);
-	GM_registerMenuCommand("Clear Cached Prices", clearCachedPrices);
-	GM_registerMenuCommand("Soft load (only missing)", softLoad);
-	GM_registerMenuCommand("Hard load (refresh all)", hardLoad);
+	GM_registerMenuCommand('View Cached Prices', viewCachedPrices);
+	GM_registerMenuCommand('Clear Cached Prices', clearCachedPrices);
+	GM_registerMenuCommand('Soft load (only missing)', softLoad);
+	GM_registerMenuCommand('Hard load (refresh all)', hardLoad);
 
 	let appItems = [];
 	let freshApps = [];
@@ -92,14 +92,14 @@
 	{
 		const btn = document.getElementById(btnId + '_after');
 		if (btn)
-			btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + (text.indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
+			btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + ((text + '').indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
 	}
 
 	// -------------------------------------------------------------------------
 	// 1) Scanning for app IDs across Lestrade's
 	// -------------------------------------------------------------------------
 	function scanLestrades() {
-		const gameLinks = document.querySelectorAll("a[data-appid], a[data-subid]");
+		const gameLinks = document.querySelectorAll('a[data-appid], a[data-subid]');
 		gameLinks.forEach((link) => {
 			const appId = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
 			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
@@ -368,7 +368,7 @@
 			appid: appId,
 			timestamp: Date.now()
 		};
-		GM_setValue("cachedPrices", cachedPrices);
+		GM_setValue('cachedPrices', cachedPrices);
 		if (document.querySelector('#wedge'))
 			GM_xmlhttpRequest({
 				method: 'POST',
@@ -397,7 +397,7 @@
 	{
 		const url = `https://gg.deals/steam/${appId}/`;
 		queueGMRequest({
-			method: "GET",
+			method: 'GET',
 			url: url,
 			onload: (response) => {
 				let price, gameTitle;
@@ -446,7 +446,7 @@
 			}
 		}
 		if (changed) {
-			GM_setValue("cachedPrices", cachedPrices);
+			GM_setValue('cachedPrices', cachedPrices);
 		}
 	}
 
