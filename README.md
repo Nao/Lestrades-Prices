@@ -7,8 +7,7 @@ You need to have TamperMonkey or GreaseMonkey installed on your browser before y
 ## Key Features
 
 1. **Price Fetching**
-   - Fetches prices for games and items listed on Lestrades.com
-   - Special handling for items like “Sack of Gems” and “Mann Co. Supply Crate Key,” fetched from alternate sources. *Gems do not currently work*
+   - Fetches prices for games and items listed on Lestrades.com; just use the Soft Load button in the Tampermonkey menu.
    - Prices are cached locally to reduce redundant requests and improve performance.
 
 2. **Caching**
