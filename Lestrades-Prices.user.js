@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.76
+// @version			0.77
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -383,7 +383,7 @@
 	{
 		const ld = doc.querySelector('script[type="application/ld+json"]');
 		if (!ld) return PRICE_NOLD; // Likely no prices available!
-		const prices = doc.querySelectorAll(':is(#keyshops, #official-stores) .similar-deals-container:has(svg.svg-icon-drm-steam) .price-inner');
+		const prices = doc.querySelectorAll(':is(#keyshops, #official-stores) .similar-deals-container:has(svg.svg-icon-drm-steam) :is(.price-inner,.price-text)');
 		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
 		const price = Math.min(...Array.from(prices).map(el => el.textContent.replace(/[^\d]/g, '')));
 		if (/\d+/.test(price)) return (JSON.parse(ld.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
