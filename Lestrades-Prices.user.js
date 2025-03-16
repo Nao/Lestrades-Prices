@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.77
+// @version			0.80
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -32,7 +32,9 @@
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
 	const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon. https://imgur.com/a/dTvpB2K for more icons made by Falc
 	const PRICE_NOLD = 'No LD';
+	const PRICE_EMPTY = 'Empty';
 	const PRICE_ERROR = 'Error';
+	const PRICE_TIMEOUT = 'Timeout';
 
 	// REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/7 seconds + potential gg-priority fetch)
 	const REQUEST_INTERVAL_MS = 7000; // 7 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
@@ -53,8 +55,7 @@
 		.ggdeals-price-container small {
 			position: relative;
 			top: -3px;
-		}
-	`);
+		}`);
 
 	let cachedPrices = GM_getValue('cachedPrices', {});
 	if (typeof cachedPrices !== 'object' || cachedPrices === null) {
@@ -82,8 +83,7 @@
 	}
 
 	function execRequest() {
-		if (requestQueue.length)
-			GM_xmlhttpRequest(requestQueue.shift());
+		if (requestQueue.length) GM_xmlhttpRequest(requestQueue.shift());
 	}
 
 	function queueGMRequest(req) { requestQueue.push(req); }
@@ -91,8 +91,7 @@
 	function link_me(btnId, link, text)
 	{
 		const btn = document.getElementById(btnId + '_after');
-		if (btn)
-			btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + ((text + '').indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
+		if (btn) btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + ((text + '').indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
 	}
 
 	// -------------------------------------------------------------------------
@@ -101,9 +100,10 @@
 	function scanLestrades() {
 		const gameLinks = document.querySelectorAll('a[data-appid], a[data-subid]');
 		gameLinks.forEach((link) => {
-			const appId = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
-			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
 			const gameName = link.innerText || document.title;
+			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
+			let appId = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
+				appId += link.getAttribute('data-store') ? '|' + link.getAttribute('data-store') : '';
 			link.removeAttribute('data-appid');
 			link.removeAttribute('data-subid');
 
@@ -115,16 +115,15 @@
 						 title="GG.Deals: Click to load/update price info!"
 						 style="border:none; outline:none; background:transparent;"/>
 				</a>
-				<small id="${btnId}_after"></small>
-			`;
+				<small id="${btnId}_after"></small>`;
 			link.insertAdjacentElement('afterend', container);
 
 			appItems.push({ appId, btnId, gameName });
 
 			// Always refetch on click
 			const btnElem = document.getElementById(btnId);
-			btnElem.addEventListener('click', () => {
-				fetchItemPrice(appId, btnId, gameName);
+			btnElem.addEventListener('click', async () => {
+				await fetchItemPrice(appId, btnId, gameName);
 				window.unsafeWindow._ignor_clic = true;
 			});
 
@@ -344,7 +343,7 @@
 		appItems.forEach(item => {
 			const { appId, btnId } = item;
 			const cached = cachedPrices[appId];
-			if (!SHOW_CACHED_IMMEDIATELY || !cached || !isCacheFresh(cached.timestamp) || cached.price === PRICE_ERROR) {
+			if (!SHOW_CACHED_IMMEDIATELY || !cached || !isCacheFresh(cached.timestamp) || [PRICE_ERROR, PRICE_TIMEOUT, PRICE_EMPTY, PRICE_NOLD].includes(cached.price)) {
 				const elem = document.getElementById(btnId);
 				if (elem) elem.click();
 			}
@@ -352,16 +351,16 @@
 	}
 
 	function hardLoad() {
-		appItems.forEach(item => {
+		appItems.forEach(async item => {
 			const { appId, btnId, gameName } = item;
-			fetchItemPrice(appId, btnId, gameName);
+			await fetchItemPrice(appId, btnId, gameName);
 		});
 	}
 
 	// -------------------------------------------------------------------------
 	// Storing in cache
 	// -------------------------------------------------------------------------
-	function storeInCache(appId, priceInfo, gameTitle) {
+	function storeInCache(appId, priceInfo, gameTitle, btnId) {
 		cachedPrices[appId] = {
 			price: priceInfo,
 			name: gameTitle || appId,
@@ -370,54 +369,87 @@
 		};
 		GM_setValue('cachedPrices', cachedPrices);
 		if (document.querySelector('#wedge'))
+		{
 			GM_xmlhttpRequest({
 				method: 'POST',
 				url: 'https://lestrades.com/?action=ajax;sa=gg',
 				data: 'gg=' + encodeURI(priceInfo) + '&app=' + appId + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 			});
+		}
+		link_me(btnId, gg_URL(appId), priceInfo);
+	}
+
+	async function GM_fetch_html(request) {
+		const response = await new Promise((resolve, reject) => {
+			GM_xmlhttpRequest({
+				method  : 'POST',
+				headers : { 'X-Requested-With': 'XMLHttpRequest', 'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+				url     : request.url,
+				data    : request.data,
+				onload  : resolve,
+				onerror : reject
+			});
+		});
+		if (response.status !== 200) throw `Invalid status: ${response.status}`;
+		return new DOMParser().parseFromString(response.responseText || '', 'text/html');
+	}
+
+	async function getPricesFromChunk(url, drm, csrf)
+	{
+		const doc = await GM_fetch_html({
+			url: `https://gg.deals${url}`,
+			data: `gg_csrf=${csrf}`
+		});
+		return doc.querySelectorAll(`.similar-deals-container:has(svg.svg-icon-drm-${drm}) :is(.price-inner, .price-text)`);
 	}
 
 	// Get currency + lowest price among all official & keyshop entries with a Steam DRM.
-	function getPricesFromDOM(doc)
+	async function getPricesFromDOM(doc, drm)
 	{
+		drm = drm || 'steam';
 		const ld = doc.querySelector('script[type="application/ld+json"]');
 		if (!ld) return PRICE_NOLD; // Likely no prices available!
-		const prices = doc.querySelectorAll(':is(#keyshops, #official-stores) .similar-deals-container:has(svg.svg-icon-drm-steam) :is(.price-inner,.price-text)');
+		let csrf = doc.querySelector('[name="csrf-token"]')?.getAttribute('content');
+		let p1 = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-icon-drm-${drm}) :is(.price-inner, .price-text)`);
+		let p2 = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-icon-drm-${drm}) :is(.price-inner, .price-text)`);
+		try {
+			if (!p1.length) p1 = await getPricesFromChunk(doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
+			if (!p2.length) p2 = await getPricesFromChunk(doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
+		}
+		catch (e) {
+			console.log(e);
+		}
 		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
-		const price = Math.min(...Array.from(prices).map(el => el.textContent.replace(/[^\d]/g, '')));
+		const price = Math.min(...Array.from(Array.from(p1).concat(Array.from(p2))).map(el => el.textContent.replace(/[^\d]/g, '')));
 		if (/\d+/.test(price)) return (JSON.parse(ld.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
-		return PRICE_ERROR;
+		return PRICE_EMPTY;
 	}
 
 	// -------------------------------------------------------------------------
 	// Fetch logic (always fresh on manual click)
 	// -------------------------------------------------------------------------
-	function fetchItemPrice(appId, btnId, gameName)
+	async function fetchItemPrice(appId, btnId, gameName)
 	{
-		const url = `https://gg.deals/steam/${appId}/`;
+		const url = `https://gg.deals/steam/${appId.split('|')[0]}/`;
 		queueGMRequest({
 			method: 'GET',
 			url: url,
-			onload: (response) => {
+			onload: async (response) => {
 				let price, gameTitle;
-				if (response.status >= 400) {
-					price = response.status;
-					gameTitle = gameName || appId;
-				}
+				if (response.status >= 400) price = response.status;
 				else {
 					const parser = new DOMParser();
 					const doc = parser.parseFromString(response.responseText, 'text/html');
-					price = getPricesFromDOM(doc);
+					price = await getPricesFromDOM(doc, appId.split('|')[1] || 'steam');
 					let nameElem = doc.querySelector('a[itemprop="item"].active span[itemprop="name"]');
-					gameTitle = nameElem ? nameElem.textContent.trim() : (gameName || appId);
+					gameTitle = nameElem ? nameElem.textContent.trim() : gameName;
 				}
 
-				storeInCache(appId, price, gameTitle);
-				link_me(btnId, gg_URL(appId), price);
+				storeInCache(appId, price, gameTitle, btnId);
 			},
-			onerror: () => callback(PRICE_ERROR, null),
-			ontimeout: () => callback(PRICE_ERROR, null)
+			onerror: () => storeInCache(appId, PRICE_ERROR, gameName, btnId),
+			ontimeout: () => storeInCache(appId, PRICE_TIMEOUT, gameName, btnId)
 		});
 	}
 
