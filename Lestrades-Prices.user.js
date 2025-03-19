@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.80
+// @version			0.81
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -401,7 +401,7 @@
 			url: `https://gg.deals${url}`,
 			data: `gg_csrf=${csrf}`
 		});
-		return doc.querySelectorAll(`.similar-deals-container:has(svg.svg-icon-drm-${drm}) :is(.price-inner, .price-text)`);
+		return doc.querySelectorAll(`.similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text)`);
 	}
 
 	// Get currency + lowest price among all official & keyshop entries with a Steam DRM.
@@ -411,8 +411,8 @@
 		const ld = doc.querySelector('script[type="application/ld+json"]');
 		if (!ld) return PRICE_NOLD; // Likely no prices available!
 		let csrf = doc.querySelector('[name="csrf-token"]')?.getAttribute('content');
-		let p1 = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-icon-drm-${drm}) :is(.price-inner, .price-text)`);
-		let p2 = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-icon-drm-${drm}) :is(.price-inner, .price-text)`);
+		let p1 = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text)`);
+		let p2 = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text)`);
 		try {
 			if (!p1.length) p1 = await getPricesFromChunk(doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
 			if (!p2.length) p2 = await getPricesFromChunk(doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
