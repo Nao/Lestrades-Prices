@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.82
+// @version			0.82.1
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -123,8 +123,8 @@
 			// Always refetch on click
 			const btnElem = document.getElementById(btnId);
 			btnElem.addEventListener('click', async () => {
-				await fetchItemPrice(appId, btnId, gameName);
 				window.unsafeWindow._ignor_clic = true;
+				await fetchItemPrice(appId, btnId, gameName);
 			});
 
 			// Show cached if fresh or mark as needed
