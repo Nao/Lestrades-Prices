@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.82.1
+// @version			0.83
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -360,7 +360,7 @@
 	// -------------------------------------------------------------------------
 	// Storing in cache
 	// -------------------------------------------------------------------------
-	function storeInCache(appId, priceInfo, gameTitle, btnId) {
+	function storeInCache(appId, priceInfo, gameTitle, btnId, gameURL) {
 		cachedPrices[appId] = {
 			price: priceInfo,
 			name: gameTitle || appId,
@@ -373,7 +373,7 @@
 			GM_xmlhttpRequest({
 				method: 'POST',
 				url: 'https://lestrades.com/?action=ajax;sa=gg',
-				data: 'gg=' + encodeURI(priceInfo) + '&app=' + encodeURI(appId) + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
+				data: 'gg=' + encodeURI(priceInfo) + '&url=' + encodeURI(gameURL) + '&app=' + encodeURI(appId) + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 			});
 		}
@@ -431,6 +431,8 @@
 	// -------------------------------------------------------------------------
 	async function fetchItemPrice(appId, btnId, gameName)
 	{
+		const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
+
 		queueGMRequest({
 			method: 'GET',
 			url: gg_URL(appId),
@@ -445,10 +447,10 @@
 					gameTitle = nameElem ? nameElem.textContent.trim() : gameName;
 				}
 
-				storeInCache(appId, price, gameTitle, btnId);
+				storeInCache(appId, price, gameTitle, btnId, my_short_url(response));
 			},
-			onerror: () => storeInCache(appId, PRICE_ERROR, gameName, btnId),
-			ontimeout: () => storeInCache(appId, PRICE_TIMEOUT, gameName, btnId)
+			onerror: (response) => storeInCache(appId, PRICE_ERROR, gameName, btnId, my_short_url(response)),
+			ontimeout: (response) => storeInCache(appId, PRICE_TIMEOUT, gameName, btnId, my_short_url(response))
 		});
 	}
 
