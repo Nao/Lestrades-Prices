@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.83
+// @version			0.85
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -36,17 +36,16 @@
 	const PRICE_ERROR = 'Error';
 	const PRICE_TIMEOUT = 'Timeout';
 
-	// REQUEST QUEUE TO LIMIT RATE (10 requests/minute => 1 request/7 seconds + potential gg-priority fetch)
-	const REQUEST_INTERVAL_MS = 7000; // 7 seconds between each request, gg.deals allows 10 requests a minute, this should help stay within that limit.
+	// REQUEST QUEUE TO LIMIT RATE (10 requests/minute as requested by gg.deals => 1 request/6 seconds)
+	const REQUEST_INTERVAL_MS = 6000;
 	let requestQueue = [];
 	setTimeout(execRequest, 1000); // Do it a first time once we have a chance to fill in that queue.
-	setInterval(execRequest, REQUEST_INTERVAL_MS);
 
 	GM_addStyle(`
 		.ggdeals-price-container {
 			display: inline-block !important;
 			position: relative;
-			margin: 0 4px 4px 3px;
+			margin: 0 0 0 3px;
 			top: 3px;
 		}
 		.ggdeals-price-container * {
@@ -84,6 +83,7 @@
 
 	function execRequest() {
 		if (requestQueue.length) GM_xmlhttpRequest(requestQueue.shift());
+		setTimeout(execRequest, REQUEST_INTERVAL_MS + Math.floor(Math.random() * 300));
 	}
 
 	function queueGMRequest(req) { requestQueue.push(req); }
@@ -100,6 +100,7 @@
 	function scanLestrades() {
 		const gameLinks = document.querySelectorAll('a[data-appid], a[data-subid]');
 		gameLinks.forEach((link) => {
+			if (link.id == 'gg-priority') return; // We're doing this silently below.
 			const gameName = link.innerText || document.title;
 			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
 			let appId = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
@@ -110,10 +111,8 @@
 			const container = document.createElement('span');
 			container.classList.add('ggdeals-price-container');
 			container.innerHTML = `
-				<a id="${btnId}" style="cursor: pointer; border:none; outline:none; background:transparent; text-decoration:none;">
-					<img src="${ICON_URL}" width="14" height="14"
-						 title="GG.Deals: Click to load/update price info!"
-						 style="border:none; outline:none; background:transparent;"/>
+				<a id="${btnId}" class="gg-btn">
+					<img src="${ICON_URL}" title="GG.Deals: Click to load/update price info!">
 				</a>
 				<small id="${btnId}_after"></small>`;
 			link.insertAdjacentElement('afterend', container);
@@ -138,13 +137,14 @@
 			}
 		});
 
-		// Auto-click the single priority entry on any page -- but only after 5 seconds, to avoid overloading the server.
-		setTimeout(() => {
-			if (document.querySelector('#gg-priority')) {
-				document.querySelector('#gg-priority + span > a').click();
-				window.unsafeWindow._ignor_clic = false;
-			}
-		}, 5000);
+		// Auto-fetch the single priority entry on any page -- but only after 5 seconds, to avoid overloading the server.
+		// Note that the website only asks for Steam apps (and not packages), to save time and sanity.
+		if (document.querySelector('#gg-priority')) {
+            setTimeout(() => {
+                let app = 'app/' + document.querySelector('#gg-priority').getAttribute('data-appid');
+				fetchItemPrice(app);
+			}, 5000);
+		}
 	}
 
 	// -------------------------------------------------------------------------
@@ -377,7 +377,7 @@
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 			});
 		}
-		link_me(btnId, gg_URL(appId), priceInfo);
+		if (btnId) link_me(btnId, gg_URL(appId), priceInfo);
 	}
 
 	async function GM_fetch_html(request) {
@@ -431,11 +431,12 @@
 	// -------------------------------------------------------------------------
 	async function fetchItemPrice(appId, btnId, gameName)
 	{
-		const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
+        const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
 
 		queueGMRequest({
 			method: 'GET',
 			url: gg_URL(appId),
+			anonymous: true,
 			onload: async (response) => {
 				let price, gameTitle;
 				if (response.status >= 400) price = response.status;
@@ -458,7 +459,7 @@
 	// URL helper
 	// -------------------------------------------------------------------------
 	function gg_URL(appId) {
-		return `https://gg.deals/steam/${appId.split('|')[0]}/`;
+		return `https://gg.deals/steam/${appId.split('|')[0]}/?region=us`;
 	}
 
 	// -------------------------------------------------------------------------
