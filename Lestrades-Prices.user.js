@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.85.1
+// @version			0.85.2
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -140,9 +140,8 @@
 		// Auto-fetch the single priority entry on any page -- but only after 5 seconds, to avoid overloading the server.
 		// Note that the website only asks for Steam apps (and not packages), to save time and sanity.
 		if (document.querySelector('#gg-priority')) {
-            setTimeout(() => {
-                let app = 'app/' + document.querySelector('#gg-priority').getAttribute('data-appid');
-				fetchItemPrice(app);
+			setTimeout(() => {
+				fetchItemPrice('app/' + document.querySelector('#gg-priority').getAttribute('data-appid'));
 			}, 5000);
 		}
 	}
@@ -418,7 +417,7 @@
 			if (!p2.length) p2 = await getPricesFromChunk(doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
 		}
 		catch (e) {
-			console.log(e);
+			console.log(e.error);
 		}
 		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
 		const price = Math.min(...Array.from(Array.from(p1).concat(Array.from(p2))).map(el => el.textContent.replace(/[^\d]/g, '')));
@@ -431,7 +430,7 @@
 	// -------------------------------------------------------------------------
 	async function fetchItemPrice(appId, btnId, gameName)
 	{
-        const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
+		const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
 
 		queueGMRequest({
 			method: 'GET',
