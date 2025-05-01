@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.85
+// @version			0.85.1
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -436,7 +436,6 @@
 		queueGMRequest({
 			method: 'GET',
 			url: gg_URL(appId),
-			anonymous: true,
 			onload: async (response) => {
 				let price, gameTitle;
 				if (response.status >= 400) price = response.status;
