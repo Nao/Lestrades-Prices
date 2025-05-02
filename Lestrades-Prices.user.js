@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.85.2
+// @version			0.85.3
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -140,7 +140,7 @@
 		// Auto-fetch the single priority entry on any page -- but only after 5 seconds, to avoid overloading the server.
 		// Note that the website only asks for Steam apps (and not packages), to save time and sanity.
 		if (document.querySelector('#gg-priority')) {
-			setTimeout(() => {
+            setTimeout(() => {
 				fetchItemPrice('app/' + document.querySelector('#gg-priority').getAttribute('data-appid'));
 			}, 5000);
 		}
@@ -413,8 +413,8 @@
 		let p1 = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text)`);
 		let p2 = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text)`);
 		try {
-			if (!p1.length) p1 = await getPricesFromChunk(doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
-			if (!p2.length) p2 = await getPricesFromChunk(doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
+			if (!p1.length && doc.querySelector('#official-stores')) p1 = await getPricesFromChunk(doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
+			if (!p2.length && doc.querySelector('#keyshops')) p2 = await getPricesFromChunk(doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
 		}
 		catch (e) {
 			console.log(e.error);
@@ -430,7 +430,7 @@
 	// -------------------------------------------------------------------------
 	async function fetchItemPrice(appId, btnId, gameName)
 	{
-		const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
+        const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
 
 		queueGMRequest({
 			method: 'GET',
