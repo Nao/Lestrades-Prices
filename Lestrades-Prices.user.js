@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.85.3
+// @version			0.85.5
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -98,8 +98,9 @@
 	// 1) Scanning for app IDs across Lestrade's
 	// -------------------------------------------------------------------------
 	function scanLestrades() {
+		if (document.URL.match('/matches/') && !document.URL.match('[?&;]gg')) return;
 		const gameLinks = document.querySelectorAll('a[data-appid], a[data-subid]');
-		gameLinks.forEach((link) => {
+		gameLinks.forEach(async (link) => {
 			if (link.id == 'gg-priority') return; // We're doing this silently below.
 			const gameName = link.innerText || document.title;
 			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
@@ -140,7 +141,7 @@
 		// Auto-fetch the single priority entry on any page -- but only after 5 seconds, to avoid overloading the server.
 		// Note that the website only asks for Steam apps (and not packages), to save time and sanity.
 		if (document.querySelector('#gg-priority')) {
-            setTimeout(() => {
+			setTimeout(() => {
 				fetchItemPrice('app/' + document.querySelector('#gg-priority').getAttribute('data-appid'));
 			}, 5000);
 		}
@@ -430,7 +431,7 @@
 	// -------------------------------------------------------------------------
 	async function fetchItemPrice(appId, btnId, gameName)
 	{
-        const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
+		const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
 
 		queueGMRequest({
 			method: 'GET',
