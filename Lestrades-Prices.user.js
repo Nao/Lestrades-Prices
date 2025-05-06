@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.85.5
+// @version			0.86
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -98,16 +98,18 @@
 	// 1) Scanning for app IDs across Lestrade's
 	// -------------------------------------------------------------------------
 	function scanLestrades() {
-		if (document.URL.match('/matches/') && !document.URL.match('[?&;]gg')) return;
-		const gameLinks = document.querySelectorAll('a[data-appid], a[data-subid]');
+		if (document.URL.includes('/matches/') && !document.URL.match(/[?&;]gg/g)) return;
+		const gameLinks = document.querySelectorAll('a[data-appid], a[data-subid], a[data-ggu]');
 		gameLinks.forEach(async (link) => {
 			if (link.id == 'gg-priority') return; // We're doing this silently below.
 			const gameName = link.innerText || document.title;
 			const btnId = `ggdeals_btn_${Math.random().toString(36).substr(2,9)}`;
-			let appId = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : 'sub/' + link.getAttribute('data-subid');
+			const ggu = link.getAttribute('data-ggu') || '';
+			let appId = link.getAttribute('data-appid') ? 'app/' + link.getAttribute('data-appid') : (link.getAttribute('data-subid') ? 'sub/' + link.getAttribute('data-subid') : (ggu.includes('/') ? ggu : 'game/' + ggu));
 				appId += link.getAttribute('data-store') ? '|' + link.getAttribute('data-store') : '';
 			link.removeAttribute('data-appid');
 			link.removeAttribute('data-subid');
+			link.removeAttribute('data-ggu');
 
 			const container = document.createElement('span');
 			container.classList.add('ggdeals-price-container');
@@ -142,7 +144,8 @@
 		// Note that the website only asks for Steam apps (and not packages), to save time and sanity.
 		if (document.querySelector('#gg-priority')) {
 			setTimeout(() => {
-				fetchItemPrice('app/' + document.querySelector('#gg-priority').getAttribute('data-appid'));
+				const ggu = document.querySelector('#gg-priority').getAttribute('data-ggu');
+				fetchItemPrice(ggu ? (ggu.includes('/') ? ggu : 'game/' + ggu) : 'app/' + document.querySelector('#gg-priority').getAttribute('data-appid'));
 			}, 5000);
 		}
 	}
@@ -373,7 +376,7 @@
 			GM_xmlhttpRequest({
 				method: 'POST',
 				url: 'https://lestrades.com/?action=ajax;sa=gg',
-				data: 'gg=' + encodeURI(priceInfo) + '&url=' + encodeURI(gameURL) + '&app=' + encodeURI(appId) + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
+				data: 'gg=' + encodeURI(priceInfo) + (appId.includes(gameURL) ? '' : '&url=' + encodeURI(gameURL)) + '&app=' + encodeURI(appId) + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 			});
 		}
@@ -431,7 +434,7 @@
 	// -------------------------------------------------------------------------
 	async function fetchItemPrice(appId, btnId, gameName)
 	{
-		const my_short_url = (r) => (r.finalUrl || '').replace(/.*\/game\//, '').replace(/\/$/, '');
+		const my_short_url = (r) => (r.finalUrl || '').replace(/.*gg\.deals\/(steam\/)?/g, '').replace(/\/(\?region=us)?$/, '');
 
 		queueGMRequest({
 			method: 'GET',
@@ -458,7 +461,9 @@
 	// URL helper
 	// -------------------------------------------------------------------------
 	function gg_URL(appId) {
-		return `https://gg.deals/steam/${appId.split('|')[0]}/?region=us`;
+		const url = appId.split('|')[0];
+		if (url.match(/^(app|sub)\/\d+$/g)) return `https://gg.deals/steam/${url}/?region=us`;
+		return `https://gg.deals/${url}/?region=us`;
 	}
 
 	// -------------------------------------------------------------------------
