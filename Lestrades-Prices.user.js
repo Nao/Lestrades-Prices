@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.86
+// @version			0.87
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -434,7 +434,7 @@
 	// -------------------------------------------------------------------------
 	async function fetchItemPrice(appId, btnId, gameName)
 	{
-		const my_short_url = (r) => (r.finalUrl || '').replace(/.*gg\.deals\/(steam\/)?/g, '').replace(/\/(\?region=us)?$/, '');
+		const my_short_url = (r) => (r.finalUrl || '').replace(/.*gg\.deals\/(us\/|steam\/)*/g, '').replace(/\/$/, '');
 
 		queueGMRequest({
 			method: 'GET',
@@ -462,8 +462,8 @@
 	// -------------------------------------------------------------------------
 	function gg_URL(appId) {
 		const url = appId.split('|')[0];
-		if (url.match(/^(app|sub)\/\d+$/g)) return `https://gg.deals/steam/${url}/?region=us`;
-		return `https://gg.deals/${url}/?region=us`;
+		if (url.match(/^(app|sub)\/\d+$/g)) return `https://gg.deals/us/steam/${url}/`;
+		return `https://gg.deals/us/${url}/`;
 	}
 
 	// -------------------------------------------------------------------------
