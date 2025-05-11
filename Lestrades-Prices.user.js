@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.87
+// @version			0.88
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -30,7 +30,7 @@
 	const ITEMS_PER_PAGE = 50; // items per page in the cache view
 	const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
-	const ICON_URL = 'https://i.imgur.com/s4oAJ1k.png'; // url used for the button icon. https://imgur.com/a/dTvpB2K for more icons made by Falc
+	const ICON_URL = 'https://i.imgur.com/AI0G7GS.gif'; // URL used for the button icon. https://imgur.com/a/dTvpB2K for more icons made by Falc
 	const PRICE_NOLD = 'No LD';
 	const PRICE_EMPTY = 'Empty';
 	const PRICE_ERROR = 'Error';
@@ -98,8 +98,9 @@
 	// 1) Scanning for app IDs across Lestrade's
 	// -------------------------------------------------------------------------
 	function scanLestrades() {
-		if (document.URL.includes('/matches/') && !document.URL.match(/[?&;]gg/g)) return;
+		if ((document.URL.match(/\/(matches|library|blacklist)\b/g)) && !document.URL.match(/[?&;]gg/g)) return;
 		const gameLinks = document.querySelectorAll('a[data-appid], a[data-subid], a[data-ggu]');
+		if (gameLinks.length > 200 && !document.URL.match(/[?&;]gg/g)) return;
 		gameLinks.forEach(async (link) => {
 			if (link.id == 'gg-priority') return; // We're doing this silently below.
 			const gameName = link.innerText || document.title;
