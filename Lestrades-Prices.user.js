@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			0.88
+// @version			1.0
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -126,7 +126,7 @@
 			// Always refetch on click
 			const btnElem = document.getElementById(btnId);
 			btnElem.addEventListener('click', async () => {
-				window.unsafeWindow._ignor_clic = true;
+				(window.unsafeWindow || window)._ignor_clic = true;
 				await fetchItemPrice(appId, btnId, gameName);
 			});
 
@@ -377,7 +377,7 @@
 			GM_xmlhttpRequest({
 				method: 'POST',
 				url: 'https://lestrades.com/?action=ajax;sa=gg',
-				data: 'gg=' + encodeURI(priceInfo) + (appId.includes(gameURL) ? '' : '&url=' + encodeURI(gameURL)) + '&app=' + encodeURI(appId) + '&' + window.unsafeWindow.we_sessvar + '=' + window.unsafeWindow.we_sessid,
+				data: 'gg=' + encodeURI(priceInfo) + (appId.includes(gameURL) ? '' : '&url=' + encodeURI(gameURL)) + '&app=' + encodeURI(appId) + '&' + (window.unsafeWindow || window).we_sessvar + '=' + (window.unsafeWindow || window).we_sessid,
 				headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
 			});
 		}
