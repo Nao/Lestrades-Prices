@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			1.0
+// @version			1.01
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -30,7 +30,7 @@
 	const ITEMS_PER_PAGE = 50; // items per page in the cache view
 	const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
-	const ICON_URL = 'https://i.imgur.com/AI0G7GS.gif'; // URL used for the button icon. https://imgur.com/a/dTvpB2K for more icons made by Falc
+	const ICON_URL = 'R0lGODlhEAAQALMAAAAQGACU3hBS/2tze3N7e4R71pScnL3GxsZznNbe3t7e3u8YMe/v7////////wCS2yH5BAEAAA8ALAAAAAAQABAAAARM8MlJq704W8ApBxUwKAP4iKR5Kg2jgADrmkDTGF3N4N3ZHBzeL5gb1hoLBPBYOuIMjYLgBoC+TglbI8Fh2bgTVEkiVpF7Z7NmzW4/IgA7';
 	const PRICE_NOLD = 'No LD';
 	const PRICE_EMPTY = 'Empty';
 	const PRICE_ERROR = 'Error';
@@ -116,7 +116,7 @@
 			container.classList.add('ggdeals-price-container');
 			container.innerHTML = `
 				<a id="${btnId}" class="gg-btn">
-					<img src="${ICON_URL}" title="GG.Deals: Click to load/update price info!">
+					<img src="data:image/gif;base64,${ICON_URL}" title="GG.Deals: Click to load/update price info!">
 				</a>
 				<small id="${btnId}_after"></small>`;
 			link.insertAdjacentElement('afterend', container);
