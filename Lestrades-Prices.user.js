@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			1.02
+// @version			1.03
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -414,15 +414,17 @@
 		drm = drm || 'steam';
 		const ld = doc.querySelector('script[type="application/ld+json"]');
 		if (!ld) return PRICE_NOLD; // Likely no prices available!
-		let csrf = doc.querySelector('[name="csrf-token"]')?.getAttribute('content');
+		let csrf = doc.querySelector('[name="csrf-token"]')?.getAttribute('content'), purl = '';
 		let p1 = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text)`);
 		let p2 = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text)`);
 		try {
-			if (!p1.length && doc.querySelector('#official-stores')) p1 = await getPricesFromChunk(doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
-			if (!p2.length && doc.querySelector('#keyshops')) p2 = await getPricesFromChunk(doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url'), drm, csrf);
+			if (!p1.length && doc.querySelector('#official-stores') && (purl = doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url')))
+				p1 = await getPricesFromChunk(purl, drm, csrf);
+			if (!p2.length && doc.querySelector('#keyshops') && (purl = doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url')))
+				p2 = await getPricesFromChunk(purl, drm, csrf);
 		}
 		catch (e) {
-			console.log(e.error);
+			console.log(e.error, purl);
 		}
 		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
 		const price = Math.min(...Array.from(Array.from(p1).concat(Array.from(p2))).map(el => el.textContent.replace(/[^\d]/g, '')));
