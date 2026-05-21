@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			1.05
+// @version			1.06
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -387,12 +387,13 @@
 	async function GM_fetch_html(request) {
 		const response = await new Promise((resolve, reject) => {
 			GM_xmlhttpRequest({
-				method  : 'POST',
-				headers : { 'X-Requested-With': 'XMLHttpRequest', 'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
-				url     : request.url,
-				data    : request.data,
-				onload  : resolve,
-				onerror : reject
+				method: 'POST',
+				headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+				url: request.url,
+				data: request.data,
+				anonymous: true,
+				onload: resolve,
+				onerror: reject
 			});
 		});
 		if (response.status !== 200) throw `Invalid status: ${response.status}`;
@@ -409,11 +410,11 @@
 	}
 
 	// Get currency + lowest price among all official & keyshop entries with a Steam DRM.
-	async function getPricesFromDOM(doc, drm)
+	async function getPricesFromDOM(doc, drm, txt)
 	{
 		drm = drm || 'steam';
-		const ld = doc.querySelector('script[type="application/ld+json"]');
-		if (!ld) return PRICE_NOLD; // Likely no prices available!
+		const currency = txt.match('"priceCurrency":"([^"]+)"');
+		if (!currency) return PRICE_NOLD; // Likely no prices available!
 		let csrf = doc.querySelector('[name="csrf-token"]')?.getAttribute('content'), purl = '';
 		let p1 = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text, .price)`);
 		let p2 = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text, .price)`);
@@ -428,7 +429,7 @@
 		}
 		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
 		const price = Math.min(...Array.from(Array.from(p1).concat(Array.from(p2))).map(el => el.textContent.replace(/[^\d]/g, '')));
-		if (/\d+/.test(price)) return (JSON.parse(ld.innerText)?.offers?.priceCurrency || 'LTS') + '|' + price;
+		if (/\d+/.test(price)) return (currency[1] || 'LTS') + '|' + price;
 		return PRICE_EMPTY;
 	}
 
@@ -442,13 +443,14 @@
 		queueGMRequest({
 			method: 'GET',
 			url: gg_URL(appId),
+			anonymous: true,
 			onload: async (response) => {
 				let price, gameTitle;
 				if (response.status >= 400) price = response.status;
 				else {
 					const parser = new DOMParser();
 					const doc = parser.parseFromString(response.responseText, 'text/html');
-					price = await getPricesFromDOM(doc, appId.split('|')[1] || 'steam');
+					price = await getPricesFromDOM(doc, appId.split('|')[1] || 'steam', response.responseText);
 					let nameElem = doc.querySelector('a[itemprop="item"].active span[itemprop="name"]');
 					gameTitle = nameElem ? nameElem.textContent.trim() : gameName;
 				}
