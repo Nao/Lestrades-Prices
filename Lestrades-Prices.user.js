@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			1.06
+// @version			1.07
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -387,11 +387,11 @@
 	async function GM_fetch_html(request) {
 		const response = await new Promise((resolve, reject) => {
 			GM_xmlhttpRequest({
-				method: 'POST',
+				method: 'GET',
+				anonymous: true,
 				headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
 				url: request.url,
 				data: request.data,
-				anonymous: true,
 				onload: resolve,
 				onerror: reject
 			});
