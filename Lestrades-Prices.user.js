@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			1.07
+// @version			1.08
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
 // @connect			gg.deals
@@ -388,12 +388,13 @@
 		const response = await new Promise((resolve, reject) => {
 			GM_xmlhttpRequest({
 				method: 'GET',
-				anonymous: true,
+				// anonymous: true,
 				headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
 				url: request.url,
 				data: request.data,
 				onload: resolve,
-				onerror: reject
+				onerror: reject,
+				cookiePartition: { topLevelSite: 'https://gg.deals' }
 			});
 		});
 		if (response.status !== 200) throw `Invalid status: ${response.status}`;
@@ -443,7 +444,7 @@
 		queueGMRequest({
 			method: 'GET',
 			url: gg_URL(appId),
-			anonymous: true,
+			// anonymous: true,
 			onload: async (response) => {
 				let price, gameTitle;
 				if (response.status >= 400) price = response.status;
@@ -458,7 +459,8 @@
 				storeInCache(appId, price, gameTitle, btnId, my_short_url(response));
 			},
 			onerror: (response) => storeInCache(appId, PRICE_ERROR, gameName, btnId, my_short_url(response)),
-			ontimeout: (response) => storeInCache(appId, PRICE_TIMEOUT, gameName, btnId, my_short_url(response))
+			ontimeout: (response) => storeInCache(appId, PRICE_TIMEOUT, gameName, btnId, my_short_url(response)),
+			cookiePartition: { topLevelSite: 'https://gg.deals' }
 		});
 	}
 
