@@ -1,20 +1,15 @@
 // ==UserScript==
 // @name			Lestrade's Prices
 // @namespace		https://lestrades.com
-// @version			1.10
+// @version			1.10.1
 // @description 	Integrates GG.Deals prices on Lestrades.com with caching, rate limiting and one-click price lookups.
 // @match			https://lestrades.com/*
-// @match			https://gg.deals/*
 // @connect			gg.deals
 // @grant			GM_xmlhttpRequest
 // @grant			GM_setValue
 // @grant			GM_getValue
 // @grant			GM_registerMenuCommand
 // @grant			GM_addStyle
-// @grant			GM_openInTab
-// @grant			GM_addValueChangeListener
-// @grant			GM_deleteValue
-// @grant			unsafeWindow
 // @run-at			document-end
 // @homepageURL		https://github.com/Nao/Lestrades-Prices/
 // @supportURL		https://lestrades.com/general/358/script-help-retrieve-gg-deals-prices/
@@ -22,26 +17,11 @@
 // @updateURL		https://github.com/Nao/Lestrades-Prices/raw/refs/heads/main/Lestrades-Prices.user.js
 // ==/UserScript==
 
-// Authors: Nao, MrAwesomeFalcon, Raggart
+// Original author: MrAwesomeFalcon
+// Fiddled with by: Nao
 
 (function() {
 	'use strict';
-
-	// Price states (also used by the relay tab, so declared first)
-	const PRICE_NOLD = 'No LD';
-	const PRICE_EMPTY = 'Empty';
-	const PRICE_ERROR = 'Error';
-	const PRICE_TIMEOUT = 'Timeout';
-	const PRICE_CF = 'CF';
-	const PRICE_RELAY = 'Relay';
-
-	// On gg.deals, only the dedicated relay tab does anything; normal browsing is untouched.
-	const RELAY_HASH = '#lestrades-relay';
-	if (location.hostname === 'gg.deals') {
-		if (location.hash === RELAY_HASH)
-			runRelayWorker();
-		return;
-	}
 
 	// CONFIG
 	const AUTO_CHECK_COUNT = 0; // number of prices to automatically check every page load. CAREFUL this will almost certainly rate limit you immediately.
@@ -51,6 +31,10 @@
 	const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 	const GAME_NAME_WIDTH = 70; // width of game names for making cache view look nicer
 	const ICON_URL = 'R0lGODlhEAAQALMAAAAQGACU3hBS/2tze3N7e4R71pScnL3GxsZznNbe3t7e3u8YMe/v7////////wCS2yH5BAEAAA8ALAAAAAAQABAAAARM8MlJq704W8ApBxUwKAP4iKR5Kg2jgADrmkDTGF3N4N3ZHBzeL5gb1hoLBPBYOuIMjYLgBoC+TglbI8Fh2bgTVEkiVpF7Z7NmzW4/IgA7';
+	const PRICE_NOLD = 'No LD';
+	const PRICE_EMPTY = 'Empty';
+	const PRICE_ERROR = 'Error';
+	const PRICE_TIMEOUT = 'Timeout';
 
 	// REQUEST QUEUE TO LIMIT RATE (10 requests/minute as requested by gg.deals => 1 request/6 seconds)
 	const REQUEST_INTERVAL_MS = 6000;
@@ -98,19 +82,14 @@
 	}
 
 	function execRequest() {
-		if (requestQueue.length) {
-			const job = requestQueue.shift();
-			if (typeof job === 'function')
-				job();
-			else
-				GM_xmlhttpRequest(job);
-		}
+		if (requestQueue.length) GM_xmlhttpRequest(requestQueue.shift());
 		setTimeout(execRequest, REQUEST_INTERVAL_MS + Math.floor(Math.random() * 300));
 	}
 
 	function queueGMRequest(req) { requestQueue.push(req); }
 
-	function link_me(btnId, link, text) {
+	function link_me(btnId, link, text)
+	{
 		const btn = document.getElementById(btnId + '_after');
 		if (btn) btn.innerHTML = ' (<a href="' + link + '" target="_blank" style="text-decoration:none;">' + ((text + '').indexOf('|') >= 0 ? (text.split('|')[0] + ' ' + text.split('|')[1] / 100) : text) + '</a>)';
 	}
@@ -153,12 +132,13 @@
 
 			// Show cached if fresh or mark as needed
 			const cached = cachedPrices[appId];
-			if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.timestamp))
+			if (SHOW_CACHED_IMMEDIATELY && cached && isCacheFresh(cached.timestamp)) {
 				link_me(btnId, gg_URL(appId), cached.price);
-			else if (!cached)
+			} else if (!cached) {
 				freshApps.push({ btnId, appId: appId });
-			else if (!isCacheFresh(cached.timestamp))
+			} else if (!isCacheFresh(cached.timestamp)) {
 				freshApps.push({ btnId, appId: appId });
+			}
 		});
 
 		// Auto-fetch the single priority entry on any page -- but only after 5 seconds, to avoid overloading the server.
@@ -259,7 +239,8 @@
 		searchButton.addEventListener('click', () => {
 			const query = searchInput.value.trim().toLowerCase();
 			if (query) {
-				filteredEntries = allEntries.filter(e => e.gameName.toLowerCase().includes(query) || (e.appid && e.appid.toString().includes(query)));
+				filteredEntries = allEntries.filter(e => e.gameName.toLowerCase().includes(query) || (e.appid && e.appid.toString().includes(query))
+				);
 			} else {
 				filteredEntries = [...allEntries];
 			}
@@ -366,7 +347,7 @@
 		appItems.forEach(item => {
 			const { appId, btnId } = item;
 			const cached = cachedPrices[appId];
-			if (!SHOW_CACHED_IMMEDIATELY || !cached || !isCacheFresh(cached.timestamp) || [PRICE_ERROR, PRICE_TIMEOUT, PRICE_EMPTY, PRICE_NOLD, PRICE_CF, PRICE_RELAY].includes(cached.price)) {
+			if (!SHOW_CACHED_IMMEDIATELY || !cached || !isCacheFresh(cached.timestamp) || [PRICE_ERROR, PRICE_TIMEOUT, PRICE_EMPTY, PRICE_NOLD].includes(cached.price)) {
 				const elem = document.getElementById(btnId);
 				if (elem) elem.click();
 			}
@@ -403,37 +384,52 @@
 		if (btnId) link_me(btnId, gg_URL(appId), priceInfo);
 	}
 
-	// Runs in the relay tab, so it fetches directly with same-origin, bypassing restrictions.
 	async function GM_fetch_html(request) {
-		const response = await pageFetch(request.url, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
-		if (response.status != 200) throw `Invalid status: ${response.status}`;
-		return new DOMParser().parseFromString(String(await response.text()), 'text/html');
+		const response = await new Promise((resolve, reject) => {
+			GM_xmlhttpRequest({
+				method: 'GET',
+				// anonymous: true,
+				headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+				url: request.url,
+				data: request.data,
+				onload: resolve,
+				onerror: reject,
+				cookiePartition: { topLevelSite: 'https://gg.deals' }
+			});
+		});
+		if (response.status !== 200) throw `Invalid status: ${response.status}`;
+		return new DOMParser().parseFromString(response.responseText || '', 'text/html');
 	}
 
-	async function getPricesFromChunk(url, drm, csrf) {
-		const doc = await GM_fetch_html({ url: `https://gg.deals${url}`	});
+	async function getPricesFromChunk(url, drm, csrf)
+	{
+		const doc = await GM_fetch_html({
+			url: `https://gg.deals${url}`,
+			data: `gg_csrf=${csrf}`
+		});
 		return doc.querySelectorAll(`.similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text, .price)`);
 	}
 
 	// Get currency + lowest price among all official & keyshop entries with a Steam DRM.
-	async function getPricesFromDOM(doc, drm, txt) {
+	async function getPricesFromDOM(doc, drm, txt)
+	{
 		drm = drm || 'steam';
 		const currency = txt.match('"priceCurrency":"([^"]+)"');
 		if (!currency) return PRICE_NOLD; // Likely no prices available!
-		let csrfToken = doc.querySelector('[name="csrf-token"]')?.getAttribute('content'), showMoreUrl = '';
-		let officialPrices = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text, .price)`);
-		let keyshopPrices = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text, .price)`);
+		let csrf = doc.querySelector('[name="csrf-token"]')?.getAttribute('content'), purl = '';
+		let p1 = doc.querySelectorAll(`#official-stores .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text, .price)`);
+		let p2 = doc.querySelectorAll(`#keyshops .similar-deals-container:has(svg.svg-drm-${drm}) :is(.price-inner, .price-text, .price)`);
 		try {
-			if (!officialPrices.length && doc.querySelector('#official-stores') && (showMoreUrl = doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url')))
-				officialPrices = await getPricesFromChunk(showMoreUrl, drm, csrfToken);
-			if (!keyshopPrices.length && doc.querySelector('#keyshops') && (showMoreUrl = doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url')))
-				keyshopPrices = await getPricesFromChunk(showMoreUrl, drm, csrfToken);
+			if (!p1.length && doc.querySelector('#official-stores') && (purl = doc.querySelector('#official-stores button.btn-show-more')?.getAttribute('data-url')))
+				p1 = await getPricesFromChunk(purl, drm, csrf);
+			if (!p2.length && doc.querySelector('#keyshops') && (purl = doc.querySelector('#keyshops button.btn-show-more')?.getAttribute('data-url')))
+				p2 = await getPricesFromChunk(purl, drm, csrf);
 		}
 		catch (e) {
-			console.log(e.error, showMoreUrl);
+			console.log(e.error, purl);
 		}
 		// GG prices always have 2 decimal digits, so just remove all non-digit chars, giving us a price in cents, and keep the smallest result!
-		const price = Math.min(...Array.from(Array.from(officialPrices).concat(Array.from(keyshopPrices))).map(priceElement => priceElement.textContent.replace(/[^\d]/g, '')));
+		const price = Math.min(...Array.from(Array.from(p1).concat(Array.from(p2))).map(el => el.textContent.replace(/[^\d]/g, '')));
 		if (/\d+/.test(price)) return (currency[1] || 'LTS') + '|' + price;
 		return PRICE_EMPTY;
 	}
@@ -441,138 +437,31 @@
 	// -------------------------------------------------------------------------
 	// Fetch logic (always fresh on manual click)
 	// -------------------------------------------------------------------------
-	async function fetchItemPrice(appId, btnId, gameName) {
-		const my_short_url = (r) => String(r.finalUrl).replace(/.*gg\.deals\/(us\/|steam\/)*/g, '').replace(/\/$/, '');
+	async function fetchItemPrice(appId, btnId, gameName)
+	{
+		const my_short_url = (r) => (r.finalUrl || '').replace(/.*gg\.deals\/(us\/|steam\/)*/g, '').replace(/\/$/, '');
 
-		queueGMRequest(async () => {
-			let response;
-			try {
-				response = await relayRequest(gg_URL(appId), appId.split('|')[1] || 'steam');
-			} catch (error) {
-				return storeInCache(appId, error === 'timeout' ? PRICE_TIMEOUT : PRICE_RELAY, gameName, btnId, '');
-			}
-			let price = response.price;
-			if (response.status === PRICE_CF) price = PRICE_CF;
-			else if (!response.status || response.status >= 400) price = response.status || PRICE_ERROR;
-			storeInCache(appId, price, response.title || gameName, btnId, my_short_url(response));
-		});
-	}
-
-	// Relay: requests are run by a real gg.deals tab (same-origin fetch), so that they should carry the Cloudflare clearance cookie along with normal browser headers.
-	// The relay tab fetches AND parses the page, and only sends back the price instead of the whole HTML going through the script storage.
-	// Each Lestrade's tab gets its own reply slot, so several open tabs don't overwrite each other. The relay acknowledges each request; unacknowledged requests are re-sent.
-	const RELAY_ALIVE_MS = 90000;	// background tabs may only tick once a minute
-	const RELAY_ACK_MS = 5000;		// re-send a request not acknowledged within this delay
-	const RELAY_MAX_SENDS = 3;		// after that, consider the relay tab gone
-	const RELAY_TIMEOUT_MS = 90000;	// 30s for the page + up to two "show more" chunks. Should be more than necessary.
-	const RELAY_TAB = Math.random().toString(36).slice(2);
-	const RELAY_RES_KEY = 'ggRelayRes_' + RELAY_TAB;
-	const relayWaiters = {};
-	let relayOpenedAt = 0, relayChain = Promise.resolve();
-
-	GM_addValueChangeListener(RELAY_RES_KEY, (name, oldVal, response) => {
-		if (response && relayWaiters[response.id]) relayWaiters[response.id](response);
-	});
-	window.addEventListener('pagehide', () => GM_deleteValue(RELAY_RES_KEY));
-
-	const relayAlive = () => Date.now() - GM_getValue('ggRelayAlive', 0) < RELAY_ALIVE_MS;
-
-	function ensureRelayTab() {
-		if (relayAlive()) return Promise.resolve();
-		if (Date.now() - relayOpenedAt > 60000) {
-			relayOpenedAt = Date.now();
-			GM_openInTab('https://gg.deals/us/' + RELAY_HASH, { active: false, insert: true, setParent: true });
-		}
-		return new Promise((resolve, reject) => {
-			const waitStart = Date.now();
-			const aliveCheckTimer = setInterval(() => {
-				if (relayAlive()) { clearInterval(aliveCheckTimer); resolve(); }
-				else if (Date.now() - waitStart > 45000) { clearInterval(aliveCheckTimer); reject('relay'); }
-			}, 1000);
-		});
-	}
-
-	function relayRequest(url, drm) {
-		const run = async () => {
-			await ensureRelayTab();
-			const id = Date.now() + '_' + Math.random().toString(36).slice(2);
-			return new Promise((resolve, reject) => {
-				let acked = false, sends = 0;
-				const send = () => GM_setValue('ggRelayReq', { id, tab: RELAY_TAB, url, drm, n: ++sends });
-				const finish = (settle, value) => { clearInterval(retryTimer); clearTimeout(hardTimeout); delete relayWaiters[id]; settle(value); };
-				relayWaiters[id] = (response) => { if (response.ack) acked = true; else finish(resolve, response); };
-				const retryTimer = setInterval(() => {
-					if (acked) return;
-					if (sends < RELAY_MAX_SENDS) return send();
-					GM_setValue('ggRelayAlive', 0); // nobody answers: reopen the relay tab next time
-					finish(reject, 'relay');
-				}, RELAY_ACK_MS);
-				const hardTimeout = setTimeout(() => finish(reject, 'timeout'), RELAY_TIMEOUT_MS);
-				send();
-			});
-		};
-		// One request at a time per Lestrades tab.
-		const pendingRequest = relayChain.then(run, run);
-		relayChain = pendingRequest.catch(() => {});
-		return pendingRequest;
-	}
-
-	function runRelayWorker() {
-		// Cloudflare challenge page: do nothing, the script runs again once the real page loads.
-		if (/just a moment/i.test(document.title)) return;
-		document.title = "[Lestrade's relay] " + document.title;
-		const beat = () => GM_setValue('ggRelayAlive', Date.now());
-		beat();
-		setInterval(beat, 5000);
-
-		const jobs = new Map(); // id -> result (null while running), so re-sent requests aren't fetched twice
-		const reply = (req, response) => GM_setValue('ggRelayRes_' + req.tab, Object.assign({ id: req.id, t: Date.now() }, response));
-
-		GM_addValueChangeListener('ggRelayReq', async (name, oldVal, req) => {
-			if (!req || !req.id || !req.tab) return;
-			if (jobs.has(req.id)) return reply(req, jobs.get(req.id) || { ack: true });
-			jobs.set(req.id, null);
-			if (jobs.size > 200) jobs.delete(jobs.keys().next().value);
-			reply(req, { ack: true });
-
-			let response;
-			try {
-				const fetchStart = Date.now();
-				const fetchResponse = await pageFetch(req.url, { credentials: 'include' });
-				const text = String(await fetchResponse.text());
-				const status = fetchResponse.status || 0;
-				const challenged = String(fetchResponse.headers.get('cf-mitigated')) === 'challenge' || /<title>\s*Just a moment/i.test(text);
-				response = { status: challenged ? PRICE_CF : status, finalUrl: String(fetchResponse.url) };
-				if (challenged) setTimeout(() => location.reload(), 500); // re-pass the challenge
-				else if (status < 400) {
-					const doc = new DOMParser().parseFromString(text, 'text/html');
-					response.price = await getPricesFromDOM(doc, req.drm, text);
-					const nameElem = doc.querySelector('a[itemprop="item"].active span[itemprop="name"]');
-					if (nameElem) response.title = nameElem.textContent.trim();
+		queueGMRequest({
+			method: 'GET',
+			url: gg_URL(appId),
+			// anonymous: true,
+			onload: async (response) => {
+				let price, gameTitle;
+				if (response.status >= 400) price = response.status;
+				else {
+					const parser = new DOMParser();
+					const doc = parser.parseFromString(response.responseText, 'text/html');
+					price = await getPricesFromDOM(doc, appId.split('|')[1] || 'steam', response.responseText);
+					let nameElem = doc.querySelector('a[itemprop="item"].active span[itemprop="name"]');
+					gameTitle = nameElem ? nameElem.textContent.trim() : gameName;
 				}
-			} catch (error) {
-				console.log("[Lestrade's relay] failed", req.url, error);
-				response = { status: 0, finalUrl: req.url };
-			}
-			console.log("[Lestrade's relay]", req.url, '->', response.status, response.price || '', `(${Date.now() - fetchStart} ms)`);
-			jobs.set(req.id, response);
-			reply(req, response);
-		});
-	}
 
-	// Firefox runs a userscript's own fetch() with the extension's identity (different origin/headers, no page cookies), which Cloudflare will of course block.
-	// Use the page's fetch instead. Chromium browsers (Brave, Chrome) just use the normal fetch.
-	function pageFetch(url, init) {
-		try {
-			if (typeof content !== 'undefined' && content && typeof content.fetch === 'function')
-				return content.fetch(url, init);
-		} catch (error) {}
-		try {
-			const pageWindow = window.unsafeWindow || unsafeWindow || window.wrappedJSObject || window;
-			if (pageWindow && pageWindow !== window && typeof cloneInto === 'function')
-				return pageWindow.fetch(url, cloneInto(init, pageWindow));
-		} catch (error) {}
-		return fetch(url, init);
+				storeInCache(appId, price, gameTitle, btnId, my_short_url(response));
+			},
+			onerror: (response) => storeInCache(appId, PRICE_ERROR, gameName, btnId, my_short_url(response)),
+			ontimeout: (response) => storeInCache(appId, PRICE_TIMEOUT, gameName, btnId, my_short_url(response)),
+			cookiePartition: { topLevelSite: 'https://gg.deals' }
+		});
 	}
 
 	// -------------------------------------------------------------------------
@@ -591,7 +480,8 @@
 		return (Date.now() - timestamp) < CACHE_DURATION;
 	}
 
-	function pruneOldEntries() {
+	function pruneOldEntries()
+	{
 		const now = Date.now();
 		let changed = false;
 		for (const [key, data] of Object.entries(cachedPrices)) {
@@ -600,19 +490,22 @@
 				changed = true;
 			}
 		}
-		if (changed)
+		if (changed) {
 			GM_setValue('cachedPrices', cachedPrices);
+		}
 	}
 
-	function formatAge(ms) {
+	function formatAge(ms)
+	{
 		const ageInDays = ms / (1000*60*60*24);
 		const ageInHours = ageInDays * 24;
 		const ageInMinutes = ageInHours * 60;
 
-		if (ageInHours < 1)
+		if (ageInHours < 1) {
 			return `${ageInMinutes.toFixed(2)} minutes`;
-		else if (ageInHours < 24)
+		} else if (ageInHours < 24) {
 			return `${ageInHours.toFixed(2)} hours`;
+		}
 		return `${ageInDays.toFixed(2)} days`;
 	}
 })();
